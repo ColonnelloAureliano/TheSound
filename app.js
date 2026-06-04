@@ -3,21 +3,20 @@ const feedback = document.getElementById("feedback");
 const bar = document.getElementById("bar");
 
 let analyser, audioCtx, source, stream;
-
 let listening = false;
-let pattern = [];
 
+let pattern = [];
 let signalOn = false;
 let startTime = 0;
 
 let firstSound = true;
 
-/* ✅ Soglia adattiva */
-let noiseFloor = 0;
-let threshold = 0;
+/* ✅ AUTO CALIBRAZIONE */
+let dotDurations = [];
+let avgDot = 0;
 
-/* timing */
-const LONG_THRESHOLD = 400;
+/* ✅ RUMORE */
+let noiseFloor = 0;
 
 mouth.onclick = async () => {
   reset();
@@ -32,9 +31,7 @@ mouth.onclick = async () => {
 
   document.body.classList.add("open","show-dot","scan");
 
-  /* 3 secondi onde */
   setTimeout(() => {
-
     document.body.classList.remove("scan");
     document.body.classList.add("red");
 
@@ -50,27 +47,29 @@ function reset() {
   pattern = [];
   listening = false;
   firstSound = true;
+
+  dotDurations = [];
+  avgDot = 0;
+
   feedback.innerText = "";
   bar.style.width = "0%";
   document.body.className = "";
 }
 
-/* ✅ TIMER 10s REALI */
+/* ✅ TIMER */
 function startTimer() {
   let start = Date.now();
 
   function update() {
     let elapsed = Date.now() - start;
-    let percent = (elapsed / 10000) * 100;
-    bar.style.width = percent + "%";
-
+    bar.style.width = (elapsed / 10000 * 100) + "%";
     if (elapsed < 10000) requestAnimationFrame(update);
   }
 
   update();
 }
 
-/* ✅ LISTENING MIGLIORATO */
+/* ✅ LISTENING SMART */
 function startListening() {
   listening = true;
 
@@ -89,17 +88,11 @@ function startListening() {
 
     let rms = Math.sqrt(sum / data.length);
 
-    /* ✅ auto-calibrazione rumore */
-    if (noiseFloor === 0) {
-      noiseFloor = rms;
-    } else {
-      noiseFloor = noiseFloor * 0.95 + rms * 0.05;
-    }
-
-    threshold = noiseFloor * 3 + 0.02;
+    /* ✅ noise auto */
+    noiseFloor = noiseFloor * 0.95 + rms * 0.05;
+    let threshold = noiseFloor * 3 + 0.02;
 
     let isSound = rms > threshold;
-
     let now = performance.now();
 
     if (isSound && !signalOn) {
@@ -114,28 +107,32 @@ function startListening() {
 
       let symbol;
 
-      /* ✅ primo sempre punto */
+      /* ✅ PRIMO SEMPRE PUNTO */
       if (firstSound) {
         symbol = '.';
         firstSound = false;
+        dotDurations.push(duration);
       } else {
-        if (duration > LONG_THRESHOLD) symbol = '-';
-        else symbol = '.';
+        /* ✅ CALCOLA MEDIA PUNTO */
+        if (dotDurations.length >= 2) {
+          avgDot = dotDurations.reduce((a,b)=>a+b,0) / dotDurations.length;
+        }
+
+        let thresholdLine = avgDot * 1.8 || 350;
+
+        if (duration > thresholdLine) {
+          symbol = '-';
+        } else {
+          symbol = '.';
+          dotDurations.push(duration);
+        }
       }
 
       pattern.push(symbol);
-
-      /* ✅ feedback */
       feedback.innerText = pattern.join(" ");
 
-      if (!checkPrefix()) {
-        fail();
-        return;
-      }
-
       if (pattern.length === 4) {
-        success();
-        return;
+        listening = false;
       }
     }
 
@@ -145,28 +142,22 @@ function startListening() {
   loop();
 }
 
-function checkPrefix() {
-  const target = ['.', '.', '-', '-'];
-  for (let i = 0; i < pattern.length; i++) {
-    if (pattern[i] !== target[i]) return false;
-  }
-  return true;
-}
-
 function success() {
-  listening = false;
   document.body.classList.add("success");
 }
 
 function fail() {
-  listening = false;
   document.body.className = "";
   feedback.innerText = "";
   bar.style.width = "0%";
 }
 
 function checkResult() {
-  if (pattern.join('') !== "..--") {
+  listening = false;
+
+  if (pattern.join('') === "..--") {
+    success();
+  } else {
     fail();
   }
 }
