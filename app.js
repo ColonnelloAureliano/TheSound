@@ -1,15 +1,22 @@
 const mouth = document.getElementById("mouth");
 const feedback = document.getElementById("feedback");
+const bar = document.getElementById("bar");
 
 let analyser, audioCtx, source, stream;
-let listening = false;
 
+let listening = false;
 let pattern = [];
+
 let signalOn = false;
 let startTime = 0;
 
 let firstSound = true;
 
+/* ✅ Soglia adattiva */
+let noiseFloor = 0;
+let threshold = 0;
+
+/* timing */
 const LONG_THRESHOLD = 400;
 
 mouth.onclick = async () => {
@@ -25,12 +32,14 @@ mouth.onclick = async () => {
 
   document.body.classList.add("open","show-dot","scan");
 
-  // 3 secondi onde
+  /* 3 secondi onde */
   setTimeout(() => {
+
     document.body.classList.remove("scan");
     document.body.classList.add("red");
 
     startListening();
+    startTimer();
 
     setTimeout(checkResult, 10000);
 
@@ -42,10 +51,26 @@ function reset() {
   listening = false;
   firstSound = true;
   feedback.innerText = "";
-
+  bar.style.width = "0%";
   document.body.className = "";
 }
 
+/* ✅ TIMER 10s REALI */
+function startTimer() {
+  let start = Date.now();
+
+  function update() {
+    let elapsed = Date.now() - start;
+    let percent = (elapsed / 10000) * 100;
+    bar.style.width = percent + "%";
+
+    if (elapsed < 10000) requestAnimationFrame(update);
+  }
+
+  update();
+}
+
+/* ✅ LISTENING MIGLIORATO */
 function startListening() {
   listening = true;
 
@@ -56,15 +81,26 @@ function startListening() {
 
     analyser.getByteTimeDomainData(data);
 
-    let rms = 0;
+    let sum = 0;
     for (let i = 0; i < data.length; i++) {
       let v = (data[i] - 128) / 128;
-      rms += v * v;
+      sum += v * v;
     }
-    rms = Math.sqrt(rms / data.length);
+
+    let rms = Math.sqrt(sum / data.length);
+
+    /* ✅ auto-calibrazione rumore */
+    if (noiseFloor === 0) {
+      noiseFloor = rms;
+    } else {
+      noiseFloor = noiseFloor * 0.95 + rms * 0.05;
+    }
+
+    threshold = noiseFloor * 3 + 0.02;
+
+    let isSound = rms > threshold;
 
     let now = performance.now();
-    let isSound = rms > 0.02;
 
     if (isSound && !signalOn) {
       signalOn = true;
@@ -78,7 +114,7 @@ function startListening() {
 
       let symbol;
 
-      // ✅ LOGICA NUOVA
+      /* ✅ primo sempre punto */
       if (firstSound) {
         symbol = '.';
         firstSound = false;
@@ -89,7 +125,7 @@ function startListening() {
 
       pattern.push(symbol);
 
-      // ✅ FEEDBACK VISIVO
+      /* ✅ feedback */
       feedback.innerText = pattern.join(" ");
 
       if (!checkPrefix()) {
@@ -110,7 +146,7 @@ function startListening() {
 }
 
 function checkPrefix() {
-  let target = ['.', '.', '-', '-'];
+  const target = ['.', '.', '-', '-'];
   for (let i = 0; i < pattern.length; i++) {
     if (pattern[i] !== target[i]) return false;
   }
@@ -126,6 +162,7 @@ function fail() {
   listening = false;
   document.body.className = "";
   feedback.innerText = "";
+  bar.style.width = "0%";
 }
 
 function checkResult() {
