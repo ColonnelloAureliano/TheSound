@@ -9,7 +9,9 @@ body{
   transition:0.4s;
 }
 
-body.red{background:darkred;}
+body.red{
+  background:darkred;
+}
 
 #mouth{
   width:300px;
@@ -32,7 +34,9 @@ body.red{background:darkred;}
   position:relative;
 }
 
-.open .cavity{height:100px;}
+.open .cavity{
+  height:100px;
+}
 
 #dot{
   width:20px;
@@ -64,12 +68,20 @@ body.red{background:darkred;}
 #status{
   color:white;
   margin-top:15px;
+  font-size:18px;
 }
 
 #feedback{
   color:white;
-  font-size:22px;
+  font-size:28px;
   margin-top:10px;
+  letter-spacing:5px;
+}
+
+#timeDisplay{
+  color:white;
+  font-size:16px;
+  margin-top:5px;
 }
 
 #timer{
