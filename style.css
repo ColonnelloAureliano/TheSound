@@ -13,7 +13,6 @@ body.red {
   background: darkred;
 }
 
-/* bocca */
 #mouth {
   width:300px;
   height:150px;
@@ -39,7 +38,6 @@ body.red {
   height:100px;
 }
 
-/* pallino */
 #dot {
   width:20px;
   height:20px;
@@ -56,7 +54,6 @@ body.red {
   background:lime;
 }
 
-/* ✅ onde */
 #waves {
   position:absolute;
   display:flex;
@@ -83,7 +80,6 @@ body.red {
   100% {transform:scale(5);opacity:0;}
 }
 
-/* ✅ feedback */
 #feedback {
   color:white;
   font-size:28px;
@@ -91,7 +87,6 @@ body.red {
   letter-spacing:15px;
 }
 
-/* ✅ TIMER BAR */
 #timer {
   width:80%;
   height:10px;
