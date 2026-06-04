@@ -1,0 +1,270 @@
+:root {
+  --bg: #000000;
+  --bg-red: #7d0000;
+  --lip: #b31228;
+  --lip-dark: #560811;
+  --mouth-black: #050505;
+  --orb-red: #ff1954;
+  --orb-green: #29d763;
+  --glow-red: rgba(255, 0, 90, 0.55);
+  --glow-green: rgba(41, 215, 99, 0.68);
+  --ring: rgba(255, 86, 130, 0.88);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  touch-action: manipulation;
+}
+
+body {
+  transition: background-color 0.5s ease;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body.state-idle,
+body.state-scanning {
+  background: var(--bg);
+}
+
+body.state-input {
+  background: var(--bg-red);
+}
+
+body.state-success {
+  background: var(--bg);
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+#mouthBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+#mouthBtn:disabled {
+  cursor: default;
+}
+
+#mouthWrap {
+  position: relative;
+  width: min(86vw, 430px);
+  aspect-ratio: 1.46 / 1;
+  display: grid;
+  place-items: center;
+}
+
+.mouth-shadow {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 45%, rgba(130, 22, 33, 0.96), rgba(63, 7, 15, 0.98) 60%, rgba(0, 0, 0, 0.98) 100%);
+  box-shadow: 0 0 42px rgba(255, 0, 90, 0.28);
+  transition: box-shadow 0.45s ease;
+}
+
+body.state-success .mouth-shadow {
+  box-shadow: 0 0 46px var(--glow-green);
+}
+
+.lip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 72%;
+  height: 24%;
+  background: linear-gradient(180deg, var(--lip), var(--lip-dark));
+  border-radius: 999px;
+  border: 1px solid rgba(75, 5, 11, 0.9);
+  box-shadow: inset 0 1px 8px rgba(255, 110, 130, 0.16), 0 12px 24px rgba(0, 0, 0, 0.45);
+}
+
+.lip-top {
+  top: 21%;
+}
+
+.lip-bottom {
+  bottom: 21%;
+}
+
+#mouthCavity {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 76%;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #0d0002, var(--mouth-black));
+  border: 1px solid rgba(44, 0, 8, 0.95);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 28px rgba(255, 0, 76, 0.22);
+  transition: height 0.46s cubic-bezier(.2,.9,.25,1.05), box-shadow 0.35s ease;
+}
+
+body.open #mouthCavity {
+  height: 42%;
+}
+
+body.state-success #mouthCavity {
+  box-shadow: inset 0 0 30px rgba(41, 215, 99, 0.2);
+}
+
+.fangs {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 18%;
+}
+
+.fangs.top {
+  top: 0;
+}
+
+.fangs.bottom {
+  bottom: 0;
+}
+
+.fang {
+  display: block;
+  width: 0;
+  height: 0;
+}
+
+.fangs.top .fang {
+  border-left: 13px solid transparent;
+  border-right: 13px solid transparent;
+  border-top: 20px solid rgba(255,255,255,0.92);
+}
+
+.fangs.bottom .fang {
+  border-left: 13px solid transparent;
+  border-right: 13px solid transparent;
+  border-bottom: 20px solid rgba(255,255,255,0.85);
+}
+
+#orb {
+  position: relative;
+  z-index: 3;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--orb-red);
+  box-shadow: 0 0 28px rgba(255, 0, 76, 0.9);
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.25s ease, transform 0.25s ease, box-shadow 0.35s ease, background-color 0.35s ease;
+}
+
+body.show-orb #orb {
+  opacity: 1;
+  transform: scale(1);
+}
+
+body.state-success #orb {
+  background: var(--orb-green);
+  box-shadow: 0 0 30px var(--glow-green);
+}
+
+#pulseLayer {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+body.state-scanning #pulseLayer {
+  display: flex;
+}
+
+.pulse {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ring);
+  opacity: 0;
+}
+
+body.state-scanning .p1 {
+  animation: sonar 1.35s ease-out infinite;
+}
+
+body.state-scanning .p2 {
+  animation: sonar 1.35s ease-out infinite 0.28s;
+}
+
+body.state-scanning .p3 {
+  animation: sonar 1.35s ease-out infinite 0.56s;
+}
+
+@keyframes sonar {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.72;
+  }
+  100% {
+    transform: scale(5.2);
+    opacity: 0;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 420px) {
+  .fangs {
+    padding: 0 16%;
+  }
+  .fangs.top .fang,
+  .fangs.bottom .fang {
+    border-left-width: 11px;
+    border-right-width: 11px;
+  }
+  .fangs.top .fang {
+    border-top-width: 17px;
+  }
+  .fangs.bottom .fang {
+    border-bottom-width: 17px;
+  }
+  #orb {
+    width: 22px;
+    height: 22px;
+  }
+}
