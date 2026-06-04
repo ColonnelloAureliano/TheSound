@@ -2,44 +2,24 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Vampire Morse Lock</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vampire Lock</title>
   <link rel="stylesheet" href="style.css" />
 </head>
-<body class="state-idle">
-  <main id="app">
-    <button id="mouthBtn" aria-label="Apri la bocca del vampiro">
-      <div id="mouthWrap">
-        <div class="mouth-shadow"></div>
+<body class="idle">
 
-        <div class="lip lip-top"></div>
-        <div class="lip lip-bottom"></div>
+  <button id="mouth">
+    <div class="cavity">
+      <div id="dot"></div>
 
-        <div id="mouthCavity">
-          <div class="fangs top">
-            <span class="fang left"></span>
-            <span class="fang right"></span>
-          </div>
-
-          <div id="orb"></div>
-
-          <div id="pulseLayer" aria-hidden="true">
-            <span class="pulse p1"></span>
-            <span class="pulse p2"></span>
-            <span class="pulse p3"></span>
-          </div>
-
-          <div class="fangs bottom">
-            <span class="fang left"></span>
-            <span class="fang right"></span>
-          </div>
-        </div>
+      <div id="waves">
+        <span></span>
+        <span></span>
+        <span></span>
       </div>
-    </button>
+    </div>
+  </button>
 
-    <div id="srStatus" aria-live="polite" class="sr-only"></div>
-  </main>
-
-  <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
