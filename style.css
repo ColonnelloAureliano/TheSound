@@ -61,9 +61,14 @@ body.red{background:darkred;}
   100%{transform:scale(5);opacity:0;}
 }
 
-#status{color:white;margin-top:15px;}
-#feedback{color:white;font-size:28px;margin-top:10px;letter-spacing:5px;}
-#timeDisplay{color:white;margin-top:5px;}
+#status, #hint, #feedback, #timeDisplay{
+  color:white;
+}
+
+#feedback{
+  font-size:28px;
+  letter-spacing:5px;
+}
 
 #timer{
   width:80%;
