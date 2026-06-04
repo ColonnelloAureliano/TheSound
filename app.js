@@ -1,6 +1,7 @@
 const mouth = document.getElementById("mouth");
 const feedback = document.getElementById("feedback");
 const statusText = document.getElementById("status");
+const timeDisplay = document.getElementById("timeDisplay");
 const bar = document.getElementById("bar");
 
 let analyser, audioCtx, source, stream;
@@ -12,12 +13,11 @@ let signalOn = false;
 let startTime = 0;
 let silentStart = 0;
 
-/* ✅ HOLD-OFF */
-const SILENCE_HOLD = 150; // ms
+const SILENCE_HOLD = 150;
 
-/* ✅ soglie */
-const MIN_SOUND = 300;
-const MIN_LINE = 1000;
+/* ✅ NUOVE SOGLIE */
+const MIN_DOT = 200;
+const MIN_LINE = 500;
 
 let noiseFloor = 0;
 let noiseSamples = [];
@@ -44,6 +44,7 @@ mouth.onclick = async () => {
   calibrate();
 };
 
+/* ✅ CALIBRAZIONE */
 function calibrate(){
   const data = new Uint8Array(analyser.fftSize);
   let start = Date.now();
@@ -76,6 +77,7 @@ function startGame(){
   setTimeout(checkResult,10000);
 }
 
+/* ✅ TIMER */
 function startTimer(){
   let start = Date.now();
   function loop(){
@@ -86,7 +88,7 @@ function startTimer(){
   loop();
 }
 
-/* ✅ DETECTION STABILE */
+/* ✅ DETECTION */
 function startListening(){
   listening = true;
   const data = new Uint8Array(analyser.fftSize);
@@ -112,7 +114,6 @@ function startListening(){
 
     if(!isSound && signalOn){
 
-      // ✅ aspetta silenzio stabile
       if(!silentStart) silentStart = now;
 
       if(now - silentStart > SILENCE_HOLD){
@@ -121,7 +122,8 @@ function startListening(){
 
         let duration = silentStart - startTime;
 
-        if(duration < MIN_SOUND){
+        /* ✅ filtro minimo */
+        if(duration < MIN_DOT){
           requestAnimationFrame(loop);
           return;
         }
@@ -150,8 +152,10 @@ function startListening(){
 
         pattern.push(symbol);
 
-        // ✅ FEEDBACK COMPLETO
-        feedback.innerText += ` ${symbol}(${Math.round(duration)}ms)`;
+        feedback.innerText = pattern.join(" ");
+
+        /* ✅ mostra solo ultimo tempo */
+        timeDisplay.innerText = `Durata: ${Math.round(duration)} ms`;
 
         if(pattern.length === 4){
           listening=false;
@@ -185,6 +189,7 @@ function reset(){
 
   feedback.innerText="";
   statusText.innerText="";
+  timeDisplay.innerText="";
   bar.style.width="0%";
 
   document.body.className="";
