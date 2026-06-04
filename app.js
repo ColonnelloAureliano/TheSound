@@ -1,17 +1,16 @@
 const mouth = document.getElementById("mouth");
-const PASSWORD = ['.', '.', '-', '-'];
+const feedback = document.getElementById("feedback");
 
-let audioCtx, analyser, source;
-let stream;
-
+let analyser, audioCtx, source, stream;
 let listening = false;
+
 let pattern = [];
 let signalOn = false;
 let startTime = 0;
-let silenceTime = 0;
 
-const SHORT_MAX = 250;
-const LONG_MIN = 300;
+let firstSound = true;
+
+const LONG_THRESHOLD = 400;
 
 mouth.onclick = async () => {
   reset();
@@ -31,7 +30,6 @@ mouth.onclick = async () => {
     document.body.classList.remove("scan");
     document.body.classList.add("red");
 
-    // ✅ SOLO ASCOLTO — NESSUN SUONO EMESSO
     startListening();
 
     setTimeout(checkResult, 10000);
@@ -42,6 +40,8 @@ mouth.onclick = async () => {
 function reset() {
   pattern = [];
   listening = false;
+  firstSound = true;
+  feedback.innerText = "";
 
   document.body.className = "";
 }
@@ -76,10 +76,23 @@ function startListening() {
 
       let duration = now - startTime;
 
-      if (duration < SHORT_MAX) pattern.push('.');
-      else if (duration > LONG_MIN) pattern.push('-');
+      let symbol;
 
-      if (!comparePrefix()) {
+      // ✅ LOGICA NUOVA
+      if (firstSound) {
+        symbol = '.';
+        firstSound = false;
+      } else {
+        if (duration > LONG_THRESHOLD) symbol = '-';
+        else symbol = '.';
+      }
+
+      pattern.push(symbol);
+
+      // ✅ FEEDBACK VISIVO
+      feedback.innerText = pattern.join(" ");
+
+      if (!checkPrefix()) {
         fail();
         return;
       }
@@ -88,8 +101,6 @@ function startListening() {
         success();
         return;
       }
-
-      silenceTime = now;
     }
 
     requestAnimationFrame(loop);
@@ -98,9 +109,10 @@ function startListening() {
   loop();
 }
 
-function comparePrefix() {
+function checkPrefix() {
+  let target = ['.', '.', '-', '-'];
   for (let i = 0; i < pattern.length; i++) {
-    if (pattern[i] !== PASSWORD[i]) return false;
+    if (pattern[i] !== target[i]) return false;
   }
   return true;
 }
@@ -113,10 +125,11 @@ function success() {
 function fail() {
   listening = false;
   document.body.className = "";
+  feedback.innerText = "";
 }
 
 function checkResult() {
-  if (pattern.join('') !== PASSWORD.join('')) {
+  if (pattern.join('') !== "..--") {
     fail();
   }
 }
