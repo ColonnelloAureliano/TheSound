@@ -1,4 +1,4 @@
-body {
+body{
   margin:0;
   height:100vh;
   display:flex;
@@ -9,11 +9,12 @@ body {
   transition:background 0.4s;
 }
 
-body.red {
-  background: darkred;
+body.red{
+  background:darkred;
 }
 
-#mouth {
+/* bocca */
+#mouth{
   width:300px;
   height:150px;
   border-radius:100px;
@@ -21,24 +22,25 @@ body.red {
   border:none;
 }
 
-.cavity {
+.cavity{
   width:70%;
   height:20px;
   background:black;
   border-radius:100px;
   margin:auto;
-  position:relative;
-  transition:height 0.4s;
   display:flex;
   justify-content:center;
   align-items:center;
+  transition:.4s;
+  position:relative;
 }
 
-.open .cavity {
+.open .cavity{
   height:100px;
 }
 
-#dot {
+/* pallino */
+#dot{
   width:20px;
   height:20px;
   background:red;
@@ -46,27 +48,20 @@ body.red {
   opacity:0;
 }
 
-.show-dot #dot {
+.show-dot #dot{
   opacity:1;
 }
 
-.success #dot {
+.success #dot{
   background:lime;
 }
 
-#waves {
+/* onde */
+#waves{
   position:absolute;
-  display:flex;
-  justify-content:center;
-  align-items:center;
 }
 
-#waves span {
-  display:none;
-}
-
-.scan #waves span {
-  display:block;
+.scan #waves span{
   position:absolute;
   border:1px solid red;
   border-radius:50%;
@@ -75,27 +70,39 @@ body.red {
   animation:pulse 1s infinite;
 }
 
-@keyframes pulse {
-  0% {transform:scale(1);opacity:1;}
-  100% {transform:scale(5);opacity:0;}
+.scan #waves span:nth-child(2){animation-delay:.3s;}
+.scan #waves span:nth-child(3){animation-delay:.6s;}
+
+@keyframes pulse{
+  0%{transform:scale(1);opacity:1;}
+  100%{transform:scale(5);opacity:0;}
 }
 
-#feedback {
+/* testo */
+#status{
+  color:white;
+  font-size:18px;
+  margin-top:15px;
+}
+
+#feedback{
   color:white;
   font-size:28px;
-  margin-top:20px;
-  letter-spacing:15px;
+  margin-top:10px;
+  letter-spacing:5px; /* ✅ allineato stile morse */
 }
 
-#timer {
+/* timer */
+#timer{
   width:80%;
   height:10px;
   border:1px solid white;
-  margin-top:25px;
+  margin-top:20px;
 }
 
-#bar {
+#bar{
   height:100%;
   width:0%;
   background:black;
 }
+
