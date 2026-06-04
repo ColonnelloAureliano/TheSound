@@ -2,6 +2,7 @@ body {
   margin: 0;
   height: 100vh;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   background: black;
@@ -28,10 +29,10 @@ body.red {
   border-radius: 100px;
   margin: auto;
   transition: height 0.4s;
-  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
+  position: relative;
 }
 
 .open .cavity {
@@ -54,8 +55,15 @@ body.red {
   background: lime;
 }
 
+/* ✅ FIX ONDE */
 #waves {
   position: absolute;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#waves span {
   display: none;
 }
 
@@ -81,3 +89,12 @@ body.red {
   0% {transform: scale(1); opacity: 1;}
   100% {transform: scale(5); opacity: 0;}
 }
+
+/* ✅ FEEDBACK */
+#feedback {
+  color: white;
+  font-size: 24px;
+  margin-top: 20px;
+  letter-spacing: 10px;
+}
+
