@@ -1,108 +1,203 @@
-body{
-  margin:0;
-  height:100vh;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  align-items:center;
-  background:black;
-  transition:background 0.4s;
+const mouth = document.getElementById("mouth");
+const feedback = document.getElementById("feedback");
+const bar = document.getElementById("bar");
+const statusText = document.getElementById("status");
+
+let analyser, audioCtx, source, stream;
+
+let listening = false;
+let pattern = [];
+let signalOn = false;
+let startTime = 0;
+
+let firstSound = true;
+
+/* ✅ calibrazione */
+let noiseSamples = [];
+let noiseFloor = 0;
+
+/* ✅ auto adattivo */
+let dotDurations = [];
+let avgDot = 0;
+
+/* COSTANTI */
+const MIN_SOUND = 300;       // < 0.3s ignorato
+const MIN_LINE = 1000;       // minimo linea
+
+mouth.onclick = async () => {
+  reset();
+
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  source = audioCtx.createMediaStreamSource(stream);
+
+  source.connect(analyser);
+
+  document.body.classList.add("open","show-dot","scan");
+
+  statusText.innerText = "FAI SILENZIO";
+
+  calibrateNoise();
+};
+
+/* ✅ CALIBRAZIONE */
+function calibrateNoise(){
+  const data = new Uint8Array(analyser.fftSize);
+  let start = Date.now();
+
+  function loop(){
+    analyser.getByteTimeDomainData(data);
+
+    let sum = 0;
+    for (let i=0;i<data.length;i++){
+      let v=(data[i]-128)/128;
+      sum += v*v;
+    }
+
+    let rms = Math.sqrt(sum/data.length);
+    noiseSamples.push(rms);
+
+    if(Date.now() - start < 3000){
+      requestAnimationFrame(loop);
+    } else {
+
+      noiseFloor = noiseSamples.reduce((a,b)=>a+b,0)/noiseSamples.length;
+
+      startGame();
+    }
+  }
+
+  loop();
 }
 
-body.red{
-  background:darkred;
+/* ✅ START GAME */
+function startGame(){
+
+  document.body.classList.remove("scan");
+  document.body.classList.add("red");
+  statusText.innerText = "";
+
+  startListening();
+  startTimer();
+
+  setTimeout(checkResult, 10000);
 }
 
-/* bocca */
-#mouth{
-  width:300px;
-  height:150px;
-  border-radius:100px;
-  background:#600;
-  border:none;
+/* ✅ TIMER */
+function startTimer(){
+  let start = Date.now();
+
+  function update(){
+    let elapsed = Date.now()-start;
+    bar.style.width = (elapsed/10000*100)+"%";
+    if(elapsed<10000) requestAnimationFrame(update);
+  }
+
+  update();
 }
 
-.cavity{
-  width:70%;
-  height:20px;
-  background:black;
-  border-radius:100px;
-  margin:auto;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  transition:.4s;
-  position:relative;
+/* ✅ DETECTION */
+function startListening(){
+
+  listening = true;
+  const data = new Uint8Array(analyser.fftSize);
+
+  function loop(){
+    if(!listening) return;
+
+    analyser.getByteTimeDomainData(data);
+
+    let sum=0;
+    for(let i=0;i<data.length;i++){
+      let v=(data[i]-128)/128;
+      sum += v*v;
+    }
+
+    let rms = Math.sqrt(sum/data.length);
+
+    /* ✅ soglia robusta */
+    let threshold = noiseFloor * 4;
+
+    let isSound = rms > threshold;
+    let now = performance.now();
+
+    if(isSound && !signalOn){
+      signalOn = true;
+      startTime = now;
+    }
+
+    if(!isSound && signalOn){
+      signalOn = false;
+
+      let duration = now - startTime;
+
+      /* ✅ ignora micro rumori */
+      if(duration < MIN_SOUND){
+        requestAnimationFrame(loop);
+        return;
+      }
+
+      let symbol;
+
+      if(firstSound){
+        symbol='.';
+        firstSound=false;
+        dotDurations.push(duration);
+      } else {
+
+        if(dotDurations.length>=2){
+          avgDot = dotDurations.reduce((a,b)=>a+b,0)/dotDurations.length;
+        }
+
+        let dynamicThreshold = Math.max(avgDot*2, MIN_LINE);
+
+        if(duration > dynamicThreshold){
+          symbol='-';
+        } else{
+          symbol='.';
+          dotDurations.push(duration);
+        }
+      }
+
+      pattern.push(symbol);
+      feedback.innerText = pattern.join(" ");
+
+      if(pattern.length === 4){
+        listening=false;
+      }
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  loop();
 }
 
-.open .cavity{
-  height:100px;
+/* ✅ CHECK FINALE */
+function checkResult(){
+  listening=false;
+
+  if(pattern.join('')==="..--"){
+    document.body.classList.add("success");
+  } else{
+    reset();
+  }
 }
 
-/* pallino */
-#dot{
-  width:20px;
-  height:20px;
-  background:red;
-  border-radius:50%;
-  opacity:0;
+/* ✅ RESET */
+function reset(){
+  pattern=[];
+  firstSound=true;
+  dotDurations=[];
+  noiseSamples=[];
+  noiseFloor=0;
+  avgDot=0;
+
+  feedback.innerText="";
+  statusText.innerText="";
+  bar.style.width="0%";
+
+  document.body.className="";
 }
-
-.show-dot #dot{
-  opacity:1;
-}
-
-.success #dot{
-  background:lime;
-}
-
-/* onde */
-#waves{
-  position:absolute;
-}
-
-.scan #waves span{
-  position:absolute;
-  border:1px solid red;
-  border-radius:50%;
-  width:20px;
-  height:20px;
-  animation:pulse 1s infinite;
-}
-
-.scan #waves span:nth-child(2){animation-delay:.3s;}
-.scan #waves span:nth-child(3){animation-delay:.6s;}
-
-@keyframes pulse{
-  0%{transform:scale(1);opacity:1;}
-  100%{transform:scale(5);opacity:0;}
-}
-
-/* testo */
-#status{
-  color:white;
-  font-size:18px;
-  margin-top:15px;
-}
-
-#feedback{
-  color:white;
-  font-size:28px;
-  margin-top:10px;
-  letter-spacing:5px; /* ✅ allineato stile morse */
-}
-
-/* timer */
-#timer{
-  width:80%;
-  height:10px;
-  border:1px solid white;
-  margin-top:20px;
-}
-
-#bar{
-  height:100%;
-  width:0%;
-  background:black;
-}
-
