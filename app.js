@@ -1,163 +1,108 @@
-const mouth = document.getElementById("mouth");
-const feedback = document.getElementById("feedback");
-const bar = document.getElementById("bar");
-
-let analyser, audioCtx, source, stream;
-let listening = false;
-
-let pattern = [];
-let signalOn = false;
-let startTime = 0;
-
-let firstSound = true;
-
-/* ✅ AUTO CALIBRAZIONE */
-let dotDurations = [];
-let avgDot = 0;
-
-/* ✅ RUMORE */
-let noiseFloor = 0;
-
-mouth.onclick = async () => {
-  reset();
-
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  analyser = audioCtx.createAnalyser();
-  source = audioCtx.createMediaStreamSource(stream);
-
-  source.connect(analyser);
-
-  document.body.classList.add("open","show-dot","scan");
-
-  setTimeout(() => {
-    document.body.classList.remove("scan");
-    document.body.classList.add("red");
-
-    startListening();
-    startTimer();
-
-    setTimeout(checkResult, 10000);
-
-  }, 3000);
-};
-
-function reset() {
-  pattern = [];
-  listening = false;
-  firstSound = true;
-
-  dotDurations = [];
-  avgDot = 0;
-
-  feedback.innerText = "";
-  bar.style.width = "0%";
-  document.body.className = "";
+body{
+  margin:0;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  background:black;
+  transition:background 0.4s;
 }
 
-/* ✅ TIMER */
-function startTimer() {
-  let start = Date.now();
-
-  function update() {
-    let elapsed = Date.now() - start;
-    bar.style.width = (elapsed / 10000 * 100) + "%";
-    if (elapsed < 10000) requestAnimationFrame(update);
-  }
-
-  update();
+body.red{
+  background:darkred;
 }
 
-/* ✅ LISTENING SMART */
-function startListening() {
-  listening = true;
-
-  const data = new Uint8Array(analyser.fftSize);
-
-  function loop() {
-    if (!listening) return;
-
-    analyser.getByteTimeDomainData(data);
-
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      let v = (data[i] - 128) / 128;
-      sum += v * v;
-    }
-
-    let rms = Math.sqrt(sum / data.length);
-
-    /* ✅ noise auto */
-    noiseFloor = noiseFloor * 0.95 + rms * 0.05;
-    let threshold = noiseFloor * 3 + 0.02;
-
-    let isSound = rms > threshold;
-    let now = performance.now();
-
-    if (isSound && !signalOn) {
-      signalOn = true;
-      startTime = now;
-    }
-
-    if (!isSound && signalOn) {
-      signalOn = false;
-
-      let duration = now - startTime;
-
-      let symbol;
-
-      /* ✅ PRIMO SEMPRE PUNTO */
-      if (firstSound) {
-        symbol = '.';
-        firstSound = false;
-        dotDurations.push(duration);
-      } else {
-        /* ✅ CALCOLA MEDIA PUNTO */
-        if (dotDurations.length >= 2) {
-          avgDot = dotDurations.reduce((a,b)=>a+b,0) / dotDurations.length;
-        }
-
-        let thresholdLine = avgDot * 1.8 || 350;
-
-        if (duration > thresholdLine) {
-          symbol = '-';
-        } else {
-          symbol = '.';
-          dotDurations.push(duration);
-        }
-      }
-
-      pattern.push(symbol);
-      feedback.innerText = pattern.join(" ");
-
-      if (pattern.length === 4) {
-        listening = false;
-      }
-    }
-
-    requestAnimationFrame(loop);
-  }
-
-  loop();
+/* bocca */
+#mouth{
+  width:300px;
+  height:150px;
+  border-radius:100px;
+  background:#600;
+  border:none;
 }
 
-function success() {
-  document.body.classList.add("success");
+.cavity{
+  width:70%;
+  height:20px;
+  background:black;
+  border-radius:100px;
+  margin:auto;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  transition:.4s;
+  position:relative;
 }
 
-function fail() {
-  document.body.className = "";
-  feedback.innerText = "";
-  bar.style.width = "0%";
+.open .cavity{
+  height:100px;
 }
 
-function checkResult() {
-  listening = false;
-
-  if (pattern.join('') === "..--") {
-    success();
-  } else {
-    fail();
-  }
+/* pallino */
+#dot{
+  width:20px;
+  height:20px;
+  background:red;
+  border-radius:50%;
+  opacity:0;
 }
+
+.show-dot #dot{
+  opacity:1;
+}
+
+.success #dot{
+  background:lime;
+}
+
+/* onde */
+#waves{
+  position:absolute;
+}
+
+.scan #waves span{
+  position:absolute;
+  border:1px solid red;
+  border-radius:50%;
+  width:20px;
+  height:20px;
+  animation:pulse 1s infinite;
+}
+
+.scan #waves span:nth-child(2){animation-delay:.3s;}
+.scan #waves span:nth-child(3){animation-delay:.6s;}
+
+@keyframes pulse{
+  0%{transform:scale(1);opacity:1;}
+  100%{transform:scale(5);opacity:0;}
+}
+
+/* testo */
+#status{
+  color:white;
+  font-size:18px;
+  margin-top:15px;
+}
+
+#feedback{
+  color:white;
+  font-size:28px;
+  margin-top:10px;
+  letter-spacing:5px; /* ✅ allineato stile morse */
+}
+
+/* timer */
+#timer{
+  width:80%;
+  height:10px;
+  border:1px solid white;
+  margin-top:20px;
+}
+
+#bar{
+  height:100%;
+  width:0%;
+  background:black;
+}
+
