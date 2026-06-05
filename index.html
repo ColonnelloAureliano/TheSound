@@ -1,96 +1,56 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Morse Whistle App</title>
-  style.css
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Morse Vampire</title>
+
+  ✅ QUESTO È IL FIX
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <main class="app" id="app">
-    <div class="top-bar">
-      <div class="timer-wrap">
-        <div class="timer-label">Tempo sessione</div>
-        <div class="progress-track">
-          <div id="progressBar" class="progress-bar"></div>
-        </div>
-        <div id="timerText" class="timer-text">Pronto</div>
-      </div>
+
+<div id="app">
+
+  <div class="top">
+    <div class="bar">
+      <div id="progress"></div>
     </div>
+    <div id="time">Pronto</div>
+  </div>
 
-    <section class="center-area">
-      <button id="startBtn" class="start-btn" aria-label="Avvia ascolto" type="button">
-        <!-- Onde ultrasuoni SOLO in calibrazione -->
-        <div class="pulse-ring ring1"></div>
-        <div class="pulse-ring ring2"></div>
-        <div class="pulse-ring ring3"></div>
+  <button id="startBtn">
+    <div class="waves"></div>
 
-        <div class="mouth-wrap">
-          <svg class="mouth-svg" viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <!-- ombra -->
-            <ellipse cx="160" cy="160" rx="105" ry="18" fill="rgba(0,0,0,0.40)"/>
-            <!-- labbro superiore -->
-            <path d="M35 100
-                     C75 35, 120 16, 160 16
-                     C200 16, 245 35, 285 100
-                     C240 72, 205 62, 160 62
-                     C115 62, 80 72, 35 100 Z"
-                  fill="#d9153a"/>
-            <!-- labbro inferiore -->
-            <path d="M35 100
-                     C75 165, 120 184, 160 184
-                     C200 184, 245 165, 285 100
-                     C240 128, 205 138, 160 138
-                     C115 138, 80 128, 35 100 Z"
-                  fill="#a90d2b"/>
-            <!-- interno bocca -->
-            <ellipse id="mouthInner" cx="160" cy="100" rx="95" ry="34" fill="#170308"/>
-            <!-- lingua -->
-            <path id="tongue" d="M105 118
-                     C122 146, 198 146, 215 118
-                     C198 102, 122 102, 105 118 Z"
-                  fill="#ff6285" opacity="0.95"/>
-          </svg>
+    <svg viewBox="0 0 300 200" class="mouth">
+      <path d="M20 100 C50 20, 250 20, 280 100 C250 80, 200 70, 150 70 C100 70, 50 80, 20 100 Z"
+        fill="#c4002b"/>
+      <path d="M20 100 C50 180, 250 180, 280 100 C250 120, 200 130, 150 130 C100 130, 50 120, 20 100 Z"
+        fill="#600015"/>
 
-          <!-- pallino rosso centrale -->
-          <div id="redDot" class="red-dot"></div>
-        </div>
-      </button>
+      <ellipse id="mouthInner" cx="150" cy="100" rx="90" ry="30" fill="#120002"/>
+      <ellipse cx="150" cy="115" rx="40" ry="15" fill="#ff4d7a"/>
 
-      <div class="info-block">
-        <div id="statusText" class="status-text">Premi la bocca per iniziare</div>
-        <div id="subText" class="sub-text">L’app userà il microfono per ascoltare i fischi</div>
-      </div>
+      <!-- zanne -->
+      <polygon id="fangL" points="120,70 135,70 127,105" fill="white"/>
+      <polygon id="fangR" points="165,70 180,70 173,105" fill="white"/>
+    </svg>
+  </button>
 
-      <div class="live-panel">
-        <div class="row">
-          <span class="label">Sequenza</span>
-          <span id="sequenceText" class="value sequence">—</span>
-        </div>
-        <div class="row">
-          <span class="label">Ultimo simbolo</span>
-          <span id="lastSymbolText" class="value">—</span>
-        </div>
-        <div class="row">
-          <span class="label">Durata rilevata</span>
-          <span id="durationText" class="value">0 ms</span>
-        </div>
-        <div class="row">
-          <span class="label">Livello</span>
-          <span id="levelText" class="value">0</span>
-        </div>
-        <div class="row">
-          <span class="label">Soglia</span>
-          <span id="thresholdText" class="value">0</span>
-        </div>
-        <div class="row">
-          <span class="label">Freq picco</span>
-          <span id="freqText" class="value">0 Hz</span>
-        </div>
-      </div>
-    </section>
-  </main>
+  <div id="status">Premi per iniziare</div>
+  <div id="sub">Microfono necessario</div>
 
-  app.jsscript>
+  <div class="panel">
+    <div>Sequenza: <span id="seq">—</span></div>
+    <div>Durata: <span id="dur">0</span> ms</div>
+    <div>Livello: <span id="lvl">0</span></div>
+  </div>
+
+</div>
+
+✅ QUESTO È IL FIX
+<script src="app.js"></script>
+
 </body>
 </html>
