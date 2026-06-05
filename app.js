@@ -7,12 +7,12 @@
   const CALIBRATION_MS = 3000;
   const SESSION_MS = 10000;
 
-  // NUOVE SOGLIE
+  // punto e linea
   const DOT_MIN_MS = 150;
   const DOT_MAX_MS = 300;
-  const MIN_LINE_ABS_MS = 350;   // linea mai sotto questo valore
+  const MIN_LINE_ABS_MS = 350; // linea mai sotto questo valore
 
-  // stabilizzazione rilevamento
+  // stabilizzazione
   const MIN_ON_MS = 45;
   const MIN_OFF_MS = 90;
 
@@ -26,6 +26,14 @@
   const THRESHOLD_MULTIPLIER = 2.0;
 
   const MAX_SEQUENCE_LEN = 28;
+
+  // sequenza segreta
+  const SECRET_SEQUENCE = "..--";
+
+  // audio output Morse NH
+  const MORSE_UNIT = 0.16;      // 160 ms
+  const MORSE_FREQ = 880;       // Hz
+  const MORSE_GAIN = 0.07;      // volume (basso per non spaccare le orecchie)
 
   // =============================
   // DOM
@@ -47,6 +55,11 @@
   const thrText = document.getElementById("thrText");
   const freqText = document.getElementById("freqText");
 
+  const mouthInner = document.getElementById("mouthInner");
+  const tongue = document.getElementById("tongue");
+  const fangL = document.getElementById("fangL");
+  const fangR = document.getElementById("fangR");
+
   // =============================
   // AUDIO STATE
   // =============================
@@ -62,7 +75,7 @@
   // APP STATE
   // =============================
   let active = false;
-  let phase = "idle"; // idle | calibrating | session
+  let phase = "idle"; // idle | calibrating | session | success
   let calibrationStart = 0;
   let sessionStart = 0;
   let sessionEnd = 0;
@@ -72,14 +85,17 @@
   let sequence = "";
   let rafId = 0;
 
-  // nuovo: memorizza il primo punto buono
   let firstDotMs = null;
 
-  // state machine suono
+  // sound state machine
   let soundState = "idle"; // idle | pendingOn | on | pendingOff
   let soundCandidateStart = 0;
   let soundStart = 0;
   let soundEndCandidate = 0;
+
+  // success state
+  let successLocked = false;
+  let nhLoopTimeout = null;
 
   // =============================
   // HELPERS
@@ -159,9 +175,7 @@
   }
 
   function getDynamicLineMinMs() {
-    if (firstDotMs == null) {
-      return MIN_LINE_ABS_MS;
-    }
+    if (firstDotMs == null) return MIN_LINE_ABS_MS;
     return Math.max(MIN_LINE_ABS_MS, firstDotMs * 2);
   }
 
@@ -169,7 +183,7 @@
     // punto valido
     if (ms >= DOT_MIN_MS && ms <= DOT_MAX_MS) {
       if (firstDotMs == null) {
-        firstDotMs = ms; // memorizza il primo punto buono
+        firstDotMs = ms;
       }
       return ".";
     }
@@ -183,8 +197,12 @@
     return null;
   }
 
+  function isSecretMatched() {
+    return sequence.endsWith(SECRET_SEQUENCE);
+  }
+
   // =============================
-  // AUDIO SETUP / TEARDOWN
+  // AUDIO INPUT SETUP / TEARDOWN
   // =============================
   async function setupAudio() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -234,6 +252,25 @@
     freqData = new Uint8Array(analyser.frequencyBinCount);
   }
 
+  async function stopInputOnly() {
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+
+    try {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+    } catch (_) {}
+
+    try { if (source) source.disconnect(); } catch (_) {}
+    try { if (analyser) analyser.disconnect(); } catch (_) {}
+
+    stream = null;
+    source = null;
+    analyser = null;
+    freqData = null;
+  }
+
   async function teardownAudio() {
     cancelAnimationFrame(rafId);
     rafId = 0;
@@ -253,6 +290,11 @@
       }
     } catch (_) {}
 
+    if (nhLoopTimeout) {
+      clearTimeout(nhLoopTimeout);
+      nhLoopTimeout = null;
+    }
+
     try {
       if (audioContext && audioContext.state !== "closed") {
         await audioContext.close();
@@ -266,6 +308,120 @@
     keepAliveGain = null;
     keepAliveNode = null;
     freqData = null;
+  }
+
+  // =============================
+  // MORSE OUTPUT: NH IN LOOP
+  // =============================
+  function scheduleTone(startTime, durationSec, freq = MORSE_FREQ, gainValue = MORSE_GAIN) {
+    if (!audioContext) return;
+
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, startTime);
+
+    gain.gain.setValueAtTime(0.00001, startTime);
+    gain.gain.linearRampToValueAtTime(gainValue, startTime + 0.01);
+    gain.gain.setValueAtTime(gainValue, startTime + Math.max(0.01, durationSec - 0.02));
+    gain.gain.linearRampToValueAtTime(0.00001, startTime + durationSec);
+
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+
+    osc.start(startTime);
+    osc.stop(startTime + durationSec + 0.02);
+  }
+
+  function scheduleNhCycle(startAt) {
+    let t = startAt;
+    const u = MORSE_UNIT;
+
+    function addSymbol(symbol) {
+      const dur = symbol === "-" ? 3 * u : 1 * u;
+      scheduleTone(t, dur);
+      t += dur + 1 * u; // spazio tra simboli
+    }
+
+    // N = -.
+    addSymbol("-");
+    addSymbol(".");
+    t += 2 * u; // porta il gap totale tra lettere a 3 unità
+
+    // H = ....
+    addSymbol(".");
+    addSymbol(".");
+    addSymbol(".");
+    addSymbol(".");
+    t += 6 * u; // pausa finale prima di ripetere (gap lungo)
+
+    return t - startAt;
+  }
+
+  function startNhLoop() {
+    if (!audioContext) return;
+
+    const loopOnce = async () => {
+      if (!successLocked || !audioContext) return;
+
+      if (audioContext.state === "suspended") {
+        try {
+          await audioContext.resume();
+        } catch (_) {}
+      }
+
+      const startTime = audioContext.currentTime + 0.05;
+      const cycleDur = scheduleNhCycle(startTime);
+
+      nhLoopTimeout = setTimeout(loopOnce, Math.max(50, cycleDur * 1000));
+    };
+
+    loopOnce();
+  }
+
+  // =============================
+  // SUCCESS MODE
+  // =============================
+  async function enterSuccessMode() {
+    if (successLocked) return;
+
+    successLocked = true;
+    active = false;
+    phase = "success";
+
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+
+    // ferma input microfono ma tieni vivo AudioContext per emettere il suono
+    await stopInputOnly();
+
+    // pulsante disabilitato definitivamente
+    startBtn.disabled = true;
+
+    // stato grafico finale
+    startBtn.classList.remove("calibrating");
+    startBtn.classList.add("active");
+    startBtn.classList.add("sounding");
+
+    // sfondo rosso totale
+    app.style.background = "linear-gradient(180deg, #5b0000 0%, #8d0000 45%, #c40000 100%)";
+
+    // barra piena
+    topLabel.textContent = "Sbloccato";
+    progressBar.style.width = "100%";
+    timeText.textContent = "NH loop";
+
+    setStatus("Sequenza corretta", "Blocco attivo • emissione Morse “NH” in loop");
+
+    // bocca spalancata in modo FORZATO
+    if (mouthInner) mouthInner.style.transform = "scaleY(1.95)";
+    if (tongue) tongue.style.transform = "translateY(12px) scaleY(1.15)";
+    if (fangL) fangL.style.transform = "translateY(14px) scaleY(1.25)";
+    if (fangR) fangR.style.transform = "translateY(14px) scaleY(1.25)";
+
+    // avvia suono Morse NH in loop
+    startNhLoop();
   }
 
   // =============================
@@ -304,12 +460,19 @@
   }
 
   async function startApp() {
-    if (active) return;
+    if (active || successLocked) return;
 
     active = true;
     app.classList.add("listening");
     startBtn.classList.add("active");
     startBtn.disabled = true;
+
+    // ripristina eventuali forzature visive
+    app.style.background = "";
+    if (mouthInner) mouthInner.style.transform = "";
+    if (tongue) tongue.style.transform = "";
+    if (fangL) fangL.style.transform = "";
+    if (fangR) fangR.style.transform = "";
 
     resetUi();
     setStatus("Richiesta microfono...", "Consenti l’accesso se il browser lo chiede");
@@ -337,6 +500,8 @@
   }
 
   async function endApp(finalText) {
+    if (successLocked) return;
+
     active = false;
     phase = "idle";
 
@@ -380,7 +545,7 @@
     freqText.textContent = `${Math.round(peakHz)} Hz`;
 
     // -------------------------
-    // FASE CALIBRAZIONE
+    // CALIBRAZIONE
     // -------------------------
     if (phase === "calibrating") {
       const elapsed = ts - calibrationStart;
@@ -403,7 +568,7 @@
     }
 
     // -------------------------
-    // FASE SESSIONE
+    // SESSIONE
     // -------------------------
     if (phase === "session") {
       const elapsed = ts - sessionStart;
@@ -423,7 +588,7 @@
       if (whistleLike) startBtn.classList.add("sounding");
       else startBtn.classList.remove("sounding");
 
-      // ========= state machine =========
+      // state machine detection
       if (soundState === "idle") {
         if (whistleLike) {
           soundState = "pendingOn";
@@ -445,7 +610,6 @@
         }
       } else if (soundState === "pendingOff") {
         if (whistleLike) {
-          // era ancora lo stesso suono, torna a ON
           soundState = "on";
         } else if ((ts - soundEndCandidate) >= MIN_OFF_MS) {
           const durationMs = soundEndCandidate - soundStart;
@@ -457,15 +621,11 @@
             appendSymbol(symbol, durationMs);
 
             if (symbol === ".") {
-              if (firstDotMs != null) {
-                const dynLine = Math.max(MIN_LINE_ABS_MS, firstDotMs * 2);
-                setStatus(
-                  "Punto rilevato",
-                  `Durata: ${Math.round(durationMs)} ms • primo punto: ${Math.round(firstDotMs)} ms • linea da ${Math.round(dynLine)} ms`
-                );
-              } else {
-                setStatus("Punto rilevato", `Durata: ${Math.round(durationMs)} ms`);
-              }
+              const dynLine = getDynamicLineMinMs();
+              setStatus(
+                "Punto rilevato",
+                `Durata: ${Math.round(durationMs)} ms • primo punto: ${firstDotMs ? Math.round(firstDotMs) : "-"} ms • linea da ${Math.round(dynLine)} ms`
+              );
             } else {
               const dynLine = getDynamicLineMinMs();
               setStatus(
@@ -475,15 +635,19 @@
             }
 
             flashGood();
+
+            // controllo sequenza speciale
+            if (isSecretMatched()) {
+              enterSuccessMode();
+              return;
+            }
           } else {
             lastText.textContent = "×";
-
             const dynLine = getDynamicLineMinMs();
             setStatus(
               "Suono ignorato",
               `Durata: ${Math.round(durationMs)} ms • punto ${DOT_MIN_MS}-${DOT_MAX_MS} ms • linea da ${Math.round(dynLine)} ms`
             );
-
             flashBad();
           }
 
@@ -505,18 +669,18 @@
   // EVENTI
   // =============================
   startBtn.addEventListener("click", async () => {
-    if (active) return;
+    if (active || successLocked) return;
     await startApp();
   }, { passive: true });
 
   document.addEventListener("visibilitychange", async () => {
-    if (document.hidden && active) {
+    if (document.hidden && active && !successLocked) {
       await endApp("Sessione interrotta");
     }
   });
 
   window.addEventListener("pagehide", async () => {
-    if (active || audioContext) {
+    if (active || audioContext || successLocked) {
       await teardownAudio();
     }
   });
