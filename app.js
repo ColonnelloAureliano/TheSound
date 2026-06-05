@@ -1,30 +1,35 @@
 (() => {
   "use strict";
 
-  // -----------------------------
-  // Config
-  // -----------------------------
+  // =============================
+  // CONFIG
+  // =============================
   const CALIBRATION_MS = 3000;
   const SESSION_MS = 10000;
 
-  const DOT_MIN_MS = 200;
-  const DOT_MAX_MS = 450;
-  const DASH_MIN_MS = 500;
+  // NUOVE SOGLIE
+  const DOT_MIN_MS = 150;
+  const DOT_MAX_MS = 300;
+  const MIN_LINE_ABS_MS = 350;   // linea mai sotto questo valore
 
+  // stabilizzazione rilevamento
   const MIN_ON_MS = 45;
   const MIN_OFF_MS = 90;
 
+  // filtro “tipo fischio”
   const BAND_LOW_HZ = 900;
   const BAND_HIGH_HZ = 4000;
   const PEAK_DOMINANCE_RATIO = 1.20;
 
+  // soglia audio dinamica
   const ABS_MIN_THRESHOLD = 10;
   const THRESHOLD_MULTIPLIER = 2.0;
+
   const MAX_SEQUENCE_LEN = 28;
 
-  // -----------------------------
+  // =============================
   // DOM
-  // -----------------------------
+  // =============================
   const app = document.getElementById("app");
   const startBtn = document.getElementById("startBtn");
 
@@ -42,9 +47,9 @@
   const thrText = document.getElementById("thrText");
   const freqText = document.getElementById("freqText");
 
-  // -----------------------------
-  // Audio state
-  // -----------------------------
+  // =============================
+  // AUDIO STATE
+  // =============================
   let audioContext = null;
   let stream = null;
   let source = null;
@@ -53,9 +58,9 @@
   let keepAliveNode = null;
   let freqData = null;
 
-  // -----------------------------
-  // App state
-  // -----------------------------
+  // =============================
+  // APP STATE
+  // =============================
   let active = false;
   let phase = "idle"; // idle | calibrating | session
   let calibrationStart = 0;
@@ -67,22 +72,25 @@
   let sequence = "";
   let rafId = 0;
 
-  // sound state machine
+  // nuovo: memorizza il primo punto buono
+  let firstDotMs = null;
+
+  // state machine suono
   let soundState = "idle"; // idle | pendingOn | on | pendingOff
   let soundCandidateStart = 0;
   let soundStart = 0;
   let soundEndCandidate = 0;
 
-  // -----------------------------
-  // Helpers
-  // -----------------------------
+  // =============================
+  // HELPERS
+  // =============================
   function now() {
     return performance.now();
   }
 
-  function setStatus(main, sub) {
+  function setStatus(main, sub = "") {
     statusText.textContent = main;
-    subText.textContent = sub || "";
+    subText.textContent = sub;
   }
 
   function resetUi() {
@@ -98,6 +106,7 @@
     freqText.textContent = "0 Hz";
 
     sequence = "";
+    firstDotMs = null;
   }
 
   function flashGood() {
@@ -110,12 +119,6 @@
     startBtn.classList.remove("good-flash");
     startBtn.classList.add("bad-flash");
     setTimeout(() => startBtn.classList.remove("bad-flash"), 240);
-  }
-
-  function classifyDuration(ms) {
-    if (ms >= DOT_MIN_MS && ms <= DOT_MAX_MS) return ".";
-    if (ms >= DASH_MIN_MS) return "-";
-    return null;
   }
 
   function appendSymbol(symbol, ms) {
@@ -155,9 +158,34 @@
     };
   }
 
-  // -----------------------------
-  // Audio setup / teardown
-  // -----------------------------
+  function getDynamicLineMinMs() {
+    if (firstDotMs == null) {
+      return MIN_LINE_ABS_MS;
+    }
+    return Math.max(MIN_LINE_ABS_MS, firstDotMs * 2);
+  }
+
+  function classifyDuration(ms) {
+    // punto valido
+    if (ms >= DOT_MIN_MS && ms <= DOT_MAX_MS) {
+      if (firstDotMs == null) {
+        firstDotMs = ms; // memorizza il primo punto buono
+      }
+      return ".";
+    }
+
+    // linea valida
+    const dynamicLineMin = getDynamicLineMinMs();
+    if (ms >= dynamicLineMin) {
+      return "-";
+    }
+
+    return null;
+  }
+
+  // =============================
+  // AUDIO SETUP / TEARDOWN
+  // =============================
   async function setupAudio() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error("BROWSER_NOT_SUPPORTED");
@@ -240,9 +268,9 @@
     freqData = null;
   }
 
-  // -----------------------------
-  // Phases
-  // -----------------------------
+  // =============================
+  // FASI APP
+  // =============================
   function beginCalibration() {
     phase = "calibrating";
     calibrationStart = now();
@@ -266,7 +294,7 @@
     progressBar.style.width = "0%";
     timeText.textContent = "10.0 s";
 
-    setStatus("Ascolto attivo", "Fischio breve = punto • fischio lungo = linea");
+    setStatus("Ascolto attivo", "Punto 150–300 ms • Linea = doppio del primo punto (min 350 ms)");
     startBtn.classList.remove("calibrating");
 
     soundState = "idle";
@@ -318,14 +346,23 @@
 
     progressBar.style.width = "100%";
     timeText.textContent = "Fine";
-    setStatus("Fine ascolto", finalText || (sequence ? `Sequenza finale: ${sequence}` : "Nessun simbolo rilevato"));
+
+    let extra = "";
+    if (firstDotMs != null) {
+      extra = ` • primo punto: ${Math.round(firstDotMs)} ms`;
+    }
+
+    setStatus(
+      "Fine ascolto",
+      finalText || (sequence ? `Sequenza finale: ${sequence}${extra}` : "Nessun simbolo rilevato")
+    );
 
     await teardownAudio();
   }
 
-  // -----------------------------
-  // Main loop
-  // -----------------------------
+  // =============================
+  // LOOP PRINCIPALE
+  // =============================
   function loop(ts) {
     if (!active || !analyser || !freqData) return;
 
@@ -342,15 +379,19 @@
     lvlText.textContent = `${Math.round(level)}`;
     freqText.textContent = `${Math.round(peakHz)} Hz`;
 
+    // -------------------------
+    // FASE CALIBRAZIONE
+    // -------------------------
     if (phase === "calibrating") {
       const elapsed = ts - calibrationStart;
       const remaining = Math.max(0, CALIBRATION_MS - elapsed);
 
       calibrationSamples.push(level);
-      const avgNoise = calibrationSamples.reduce((a, b) => a + b, 0) / Math.max(1, calibrationSamples.length);
+      const avgNoise =
+        calibrationSamples.reduce((a, b) => a + b, 0) / Math.max(1, calibrationSamples.length);
+
       threshold = Math.max(ABS_MIN_THRESHOLD, avgNoise * THRESHOLD_MULTIPLIER);
       thrText.textContent = `${Math.round(threshold)}`;
-
       timeText.textContent = `${(remaining / 1000).toFixed(1)} s`;
 
       if (elapsed >= CALIBRATION_MS) {
@@ -361,6 +402,9 @@
       return;
     }
 
+    // -------------------------
+    // FASE SESSIONE
+    // -------------------------
     if (phase === "session") {
       const elapsed = ts - sessionStart;
       const remaining = Math.max(0, sessionEnd - ts);
@@ -379,7 +423,7 @@
       if (whistleLike) startBtn.classList.add("sounding");
       else startBtn.classList.remove("sounding");
 
-      // state machine detection
+      // ========= state machine =========
       if (soundState === "idle") {
         if (whistleLike) {
           soundState = "pendingOn";
@@ -401,6 +445,7 @@
         }
       } else if (soundState === "pendingOff") {
         if (whistleLike) {
+          // era ancora lo stesso suono, torna a ON
           soundState = "on";
         } else if ((ts - soundEndCandidate) >= MIN_OFF_MS) {
           const durationMs = soundEndCandidate - soundStart;
@@ -410,14 +455,35 @@
 
           if (symbol) {
             appendSymbol(symbol, durationMs);
-            setStatus(
-              symbol === "." ? "Punto rilevato" : "Linea rilevata",
-              `Durata rilevata: ${Math.round(durationMs)} ms`
-            );
+
+            if (symbol === ".") {
+              if (firstDotMs != null) {
+                const dynLine = Math.max(MIN_LINE_ABS_MS, firstDotMs * 2);
+                setStatus(
+                  "Punto rilevato",
+                  `Durata: ${Math.round(durationMs)} ms • primo punto: ${Math.round(firstDotMs)} ms • linea da ${Math.round(dynLine)} ms`
+                );
+              } else {
+                setStatus("Punto rilevato", `Durata: ${Math.round(durationMs)} ms`);
+              }
+            } else {
+              const dynLine = getDynamicLineMinMs();
+              setStatus(
+                "Linea rilevata",
+                `Durata: ${Math.round(durationMs)} ms • soglia linea: ${Math.round(dynLine)} ms`
+              );
+            }
+
             flashGood();
           } else {
             lastText.textContent = "×";
-            setStatus("Suono ignorato", `Durata non valida: ${Math.round(durationMs)} ms`);
+
+            const dynLine = getDynamicLineMinMs();
+            setStatus(
+              "Suono ignorato",
+              `Durata: ${Math.round(durationMs)} ms • punto ${DOT_MIN_MS}-${DOT_MAX_MS} ms • linea da ${Math.round(dynLine)} ms`
+            );
+
             flashBad();
           }
 
@@ -435,9 +501,9 @@
     rafId = requestAnimationFrame(loop);
   }
 
-  // -----------------------------
-  // Events
-  // -----------------------------
+  // =============================
+  // EVENTI
+  // =============================
   startBtn.addEventListener("click", async () => {
     if (active) return;
     await startApp();
