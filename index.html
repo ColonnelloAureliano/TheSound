@@ -1,24 +1,76 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <title>Morse Detector</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Morse Whistle Detector</title>
+  style.css
 </head>
 <body>
+  <main class="app">
+    <div id="bgGlow" class="bg-glow"></div>
 
-    <div id="container">
-        <button id="startBtn">🧛</button>
+    <section class="center-wrap">
+      <div id="topInfo" class="top-info">
+        <div id="statusText" class="status">Premi la bocca per iniziare</div>
+        <div id="countdownText" class="countdown">Pronto</div>
+      </div>
 
-        <div id="status">Premi per iniziare</div>
+      <button id="mouthBtn" class="mouth-btn" aria-label="Avvia ascolto" type="button">
+        <span class="wave wave-1"></span>
+        <span class="wave wave-2"></span>
+        <span class="wave wave-3"></span>
 
-        <div id="debug">
-            Livello: <span id="level">0</span>
+        <svg id="mouthSvg" class="mouth-svg" viewBox="0 0 220 140" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- labbro superiore -->
+          <path d="M20 70
+                   C45 25, 85 10, 110 10
+                   C135 10, 175 25, 200 70
+                   C175 45, 135 38, 110 38
+                   C85 38, 45 45, 20 70 Z"
+                fill="#d9153a"/>
+          <!-- labbro inferiore -->
+          <path d="M20 70
+                   C45 115, 85 130, 110 130
+                   C135 130, 175 115, 200 70
+                   C175 95, 135 102, 110 102
+                   C85 102, 45 95, 20 70 Z"
+                fill="#b30f2f"/>
+          <!-- interno bocca -->
+          <ellipse id="mouthInner" cx="110" cy="70" rx="68" ry="22" fill="#170408"/>
+          <!-- lingua -->
+          <path id="tongue" d="M75 78
+                   C85 95, 135 95, 145 78
+                   C135 68, 85 68, 75 78 Z"
+                fill="#ff5d7d" opacity="0.92"/>
+        </svg>
+      </button>
+
+      <div class="result-panel">
+        <div class="sequence-wrap">
+          <div class="label">Sequenza rilevata</div>
+          <div id="sequenceText" class="sequence">—</div>
         </div>
-    </div>
 
-    <script src="app.js"></script>
+        <div class="last-wrap">
+          <div class="label">Ultimo simbolo</div>
+          <div id="symbolText" class="symbol">—</div>
+        </div>
+      </div>
+
+      <div class="debug-panel">
+        <div class="debug-row"><span>Livello</span><strong id="levelText">0</strong></div>
+        <div class="debug-row"><span>Soglia</span><strong id="thresholdText">0</strong></div>
+        <div class="debug-row"><span>Freq picco</span><strong id="freqText">0 Hz</strong></div>
+        <div class="debug-row"><span>Durata suono</span><strong id="durationText">0 ms</strong></div>
+      </div>
+
+      <div id="hintText" class="hint">
+        Fischia o emetti un suono acuto. Punto ≈ 200–450 ms • Linea ≥ 500 ms
+      </div>
+    </section>
+  </main>
+
+  app.jsscript>
 </body>
 </html>
