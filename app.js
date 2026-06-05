@@ -1,456 +1,303 @@
-(() => {
-  "use strict";
+:root {
+  --bg: #000000;
+  --fg: #ffffff;
+  --muted: rgba(255,255,255,0.68);
+  --panel: rgba(255,255,255,0.08);
+  --panel-border: rgba(255,255,255,0.12);
+  --red: #ff2b56;
+  --red-dark: #8f001d;
+  --red-soft: rgba(255, 25, 72, 0.18);
+  --green: #56ffb6;
+  --radius: 22px;
+  --shadow: 0 18px 40px rgba(0,0,0,0.38);
+}
 
-  // ========================
-  // CONFIG
-  // ========================
-  const SESSION_MS = 10000;
-  const CALIBRATION_MS = 3000;
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
 
-  const DOT_MIN_MS = 200;
-  const DOT_MAX_MS = 450;
-  const DASH_MIN_MS = 500;
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  overflow: hidden;
+}
 
-  const MIN_ON_MS = 45;   // evita falsi trigger brevissimi
-  const MIN_OFF_MS = 90;  // aspetta fine suono reale
+body {
+  touch-action: manipulation;
+}
 
-  // Filtro "tipo fischio"
-  const BAND_LOW_HZ = 900;
-  const BAND_HIGH_HZ = 4000;
-  const PEAK_DOMINANCE_RATIO = 1.25;
+.app {
+  width: 100%;
+  min-height: 100dvh;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, transparent 35%),
+    linear-gradient(180deg, #060606 0%, #000000 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 14px 24px;
+  transition: background 180ms ease;
+}
 
-  // Soglia dinamica
-  const ABS_MIN_THRESHOLD = 10;
-  const THRESHOLD_MULTIPLIER = 2.0;
+.app.listening {
+  background:
+    radial-gradient(circle at center, rgba(255, 10, 60, 0.12) 0%, transparent 35%),
+    linear-gradient(180deg, #1d0008 0%, #070001 100%);
+}
 
-  const MAX_SEQUENCE_LEN = 28;
+.top-bar {
+  width: min(92vw, 640px);
+  margin-top: 4px;
+}
 
-  // ========================
-  // DOM
-  // ========================
-  const app = document.getElementById("app");
-  const startBtn = document.getElementById("startBtn");
-  const progressBar = document.getElementById("progressBar");
-  const timerText = document.getElementById("timerText");
+.timer-wrap {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
 
-  const statusText = document.getElementById("statusText");
-  const subText = document.getElementById("subText");
+.timer-label {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
 
-  const sequenceText = document.getElementById("sequenceText");
-  const lastSymbolText = document.getElementById("lastSymbolText");
-  const durationText = document.getElementById("durationText");
-  const levelText = document.getElementById("levelText");
-  const thresholdText = document.getElementById("thresholdText");
-  const freqText = document.getElementById("freqText");
+.progress-track {
+  width: 100%;
+  height: 12px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 999px;
+  overflow: hidden;
+}
 
-  // ========================
-  // AUDIO
-  // ========================
-  let audioContext = null;
-  let stream = null;
-  let source = null;
-  let analyser = null;
-  let keepAliveGain = null;
-  let keepAliveNode = null;
-  let freqData = null;
+.progress-bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #ff5f7f 0%, #ff1d50 100%);
+  border-radius: 999px;
+  transition: width 80ms linear;
+}
 
-  // ========================
-  // STATO
-  // ========================
-  let sessionActive = false;
-  let sessionStartTs = 0;
-  let sessionEndTs = 0;
+.timer-text {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  color: var(--fg);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
-  let threshold = ABS_MIN_THRESHOLD;
-  let calibrationSamples = [];
-  let sequence = "";
-  let rafId = 0;
+.center-area {
+  flex: 1;
+  width: min(92vw, 640px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
 
-  // State machine suono
-  let soundState = "idle"; // idle | pendingOn | on | pendingOff
-  let soundCandidateStart = 0;
-  let soundStartTs = 0;
-  let soundEndCandidateTs = 0;
+.start-btn {
+  position: relative;
+  width: min(80vw, 360px);
+  height: min(80vw, 360px);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  outline: none;
+}
 
-  // ========================
-  // HELPERS
-  // ========================
-  function now() {
-    return performance.now();
+.start-btn:disabled {
+  cursor: default;
+}
+
+.mouth-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.mouth-svg {
+  width: 100%;
+  max-width: 360px;
+  display: block;
+  filter:
+    drop-shadow(0 0 18px rgba(255, 24, 79, 0.20))
+    drop-shadow(0 14px 42px rgba(0,0,0,0.52));
+  transition: transform 100ms ease, filter 120ms ease;
+}
+
+.start-btn.active .mouth-svg {
+  transform: scale(1.03);
+  filter:
+    drop-shadow(0 0 28px rgba(255, 24, 79, 0.34))
+    drop-shadow(0 14px 42px rgba(0,0,0,0.58));
+}
+
+.start-btn.sounding #mouthInner {
+  transform-origin: 160px 100px;
+  transform: scaleY(1.30);
+}
+
+.start-btn.sounding #tongue {
+  transform-origin: 160px 118px;
+  transform: scaleY(1.08);
+}
+
+.red-dot {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ff7b98, #ff204f 50%, #b50026 100%);
+  box-shadow:
+    0 0 0 5px rgba(255, 32, 79, 0.10),
+    0 0 18px rgba(255, 32, 79, 0.55);
+  z-index: 3;
+}
+
+.pulse-ring {
+  position: absolute;
+  width: 64%;
+  height: 64%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 35, 78, 0);
+  opacity: 0;
+  transform: scale(0.70);
+  pointer-events: none;
+}
+
+.start-btn.calibrating .pulse-ring {
+  animation: pulse 1.4s infinite ease-out;
+}
+
+.start-btn.calibrating .ring2 { animation-delay: 0.45s; }
+.start-btn.calibrating .ring3 { animation-delay: 0.90s; }
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.70);
+    opacity: 0;
+    border-color: rgba(255, 35, 78, 0.0);
+  }
+  12% {
+    opacity: 0.95;
+    border-color: rgba(255, 35, 78, 0.9);
+  }
+  100% {
+    transform: scale(1.34);
+    opacity: 0;
+    border-color: rgba(255, 35, 78, 0.0);
+  }
+}
+
+.info-block {
+  text-align: center;
+  min-height: 58px;
+}
+
+.status-text {
+  font-size: clamp(1.1rem, 2.8vw, 1.35rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.sub-text {
+  margin-top: 6px;
+  font-size: 0.96rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.live-panel {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  align-items: center;
+}
+
+.label {
+  color: var(--muted);
+  font-size: 0.96rem;
+}
+
+.value {
+  color: var(--fg);
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sequence {
+  font-size: 1.65rem;
+  letter-spacing: 0.20em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 58%;
+}
+
+.good-flash {
+  animation: goodFlash 240ms ease;
+}
+
+.bad-flash {
+  animation: badFlash 240ms ease;
+}
+
+@keyframes goodFlash {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(1.18); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes badFlash {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
+}
+
+@media (max-width: 430px) {
+  .start-btn {
+    width: min(82vw, 320px);
+    height: min(82vw, 320px);
   }
 
-  function setStatus(main, sub = "") {
-    statusText.textContent = main;
-    subText.textContent = sub;
+  .sequence {
+    max-width: 54%;
+    font-size: 1.45rem;
   }
 
-  function updateProgress(ts) {
-    const elapsed = Math.max(0, ts - sessionStartTs);
-    const progress = Math.min(1, elapsed / SESSION_MS);
-    progressBar.style.width = `${progress * 100}%`;
-
-    const remaining = Math.max(0, sessionEndTs - ts);
-    timerText.textContent = remaining > 0 ? `${(remaining / 1000).toFixed(1)} s` : "0.0 s";
+  .sub-text {
+    font-size: 0.90rem;
   }
-
-  function clearUiForNewSession() {
-    progressBar.style.width = "0%";
-    timerText.textContent = `${(SESSION_MS / 1000).toFixed(1)} s`;
-
-    sequence = "";
-    sequenceText.textContent = "—";
-    lastSymbolText.textContent = "—";
-    durationText.textContent = "0 ms";
-    levelText.textContent = "0";
-    thresholdText.textContent = "0";
-    freqText.textContent = "0 Hz";
-  }
-
-  function showSymbol(symbol, durationMs) {
-    lastSymbolText.textContent = symbol;
-    durationText.textContent = `${Math.round(durationMs)} ms`;
-
-    if (sequence.length >= MAX_SEQUENCE_LEN) {
-      sequence = sequence.slice(-(MAX_SEQUENCE_LEN - 1));
-    }
-    sequence += symbol;
-    sequenceText.textContent = sequence || "—";
-  }
-
-  function bandMetrics(data, sampleRate, fftSize, lowHz, highHz) {
-    const binHz = sampleRate / fftSize;
-    const start = Math.max(0, Math.floor(lowHz / binHz));
-    const end = Math.min(data.length - 1, Math.ceil(highHz / binHz));
-
-    let sum = 0;
-    let count = 0;
-    let peak = -1;
-    let peakIdx = start;
-
-    for (let i = start; i <= end; i++) {
-      const v = data[i];
-      sum += v;
-      count++;
-      if (v > peak) {
-        peak = v;
-        peakIdx = i;
-      }
-    }
-
-    return {
-      avg: count ? sum / count : 0,
-      peak,
-      peakHz: peakIdx * sampleRate / fftSize
-    };
-  }
-
-  function classifyDuration(ms) {
-    if (ms >= DOT_MIN_MS && ms <= DOT_MAX_MS) return ".";
-    if (ms >= DASH_MIN_MS) return "-";
-    return null;
-  }
-
-  function flashGood() {
-    startBtn.classList.remove("bad-flash");
-    startBtn.classList.add("good-flash");
-    setTimeout(() => startBtn.classList.remove("good-flash"), 260);
-  }
-
-  function flashBad() {
-    startBtn.classList.remove("good-flash");
-    startBtn.classList.add("bad-flash");
-    setTimeout(() => startBtn.classList.remove("bad-flash"), 260);
-  }
-
-  // ========================
-  // AUDIO SETUP / STOP
-  // ========================
-  async function setupAudio() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error("BROWSER_NOT_SUPPORTED");
-    }
-
-    // AudioContext creato nel click -> iPhone friendly
-    audioContext = new (window.AudioContext || window.webkitAudioContext)({
-      latencyHint: "interactive"
-    });
-
-    // richiesta microfono nel click
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false
-      }
-    });
-
-    // fix Safari/iPhone: resume dopo prompt
-    if (audioContext.state === "suspended") {
-      await audioContext.resume();
-    }
-
-    source = audioContext.createMediaStreamSource(stream);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.18;
-
-    source.connect(analyser);
-
-    // piccolo keep alive per Safari (quasi muto)
-    keepAliveGain = audioContext.createGain();
-    keepAliveGain.gain.value = 0.00001;
-    keepAliveGain.connect(audioContext.destination);
-
-    if (typeof audioContext.createConstantSource === "function") {
-      keepAliveNode = audioContext.createConstantSource();
-      keepAliveNode.offset.value = 1;
-      keepAliveNode.connect(keepAliveGain);
-      keepAliveNode.start();
-    } else {
-      keepAliveNode = audioContext.createOscillator();
-      keepAliveNode.frequency.value = 1;
-      keepAliveNode.connect(keepAliveGain);
-      keepAliveNode.start();
-    }
-
-    freqData = new Uint8Array(analyser.frequencyBinCount);
-  }
-
-  async function stopAudio() {
-    cancelAnimationFrame(rafId);
-    rafId = 0;
-
-    try {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    } catch (_) {}
-
-    try { if (source) source.disconnect(); } catch (_) {}
-    try { if (analyser) analyser.disconnect(); } catch (_) {}
-    try { if (keepAliveNode) keepAliveNode.disconnect(); } catch (_) {}
-    try { if (keepAliveGain) keepAliveGain.disconnect(); } catch (_) {}
-
-    try {
-      if (keepAliveNode && typeof keepAliveNode.stop === "function") {
-        keepAliveNode.stop();
-      }
-    } catch (_) {}
-
-    try {
-      if (audioContext && audioContext.state !== "closed") {
-        await audioContext.close();
-      }
-    } catch (_) {}
-
-    audioContext = null;
-    stream = null;
-    source = null;
-    analyser = null;
-    keepAliveGain = null;
-    keepAliveNode = null;
-    freqData = null;
-  }
-
-  // ========================
-  // SESSIONE
-  // ========================
-  async function startSession() {
-    if (sessionActive) return;
-
-    sessionActive = true;
-    startBtn.disabled = true;
-    startBtn.classList.add("active");
-    app.classList.add("listening");
-
-    calibrationSamples = [];
-    threshold = ABS_MIN_THRESHOLD;
-    soundState = "idle";
-    soundCandidateStart = 0;
-    soundStartTs = 0;
-    soundEndCandidateTs = 0;
-
-    clearUiForNewSession();
-    setStatus("Richiesta microfono...", "Consenti l’accesso se il browser lo chiede");
-
-    try {
-      await setupAudio();
-
-      sessionStartTs = now();
-      sessionEndTs = sessionStartTs + SESSION_MS;
-
-      rafId = requestAnimationFrame(loop);
-    } catch (err) {
-      console.error(err);
-
-      let message = "Errore accesso microfono";
-      if (err && err.name === "NotAllowedError") {
-        message = "Permesso microfono negato o bloccato";
-      } else if (err && err.name === "NotFoundError") {
-        message = "Microfono non trovato";
-      } else if (err && err.message === "BROWSER_NOT_SUPPORTED") {
-        message = "Browser non compatibile";
-      }
-
-      setStatus(`❌ ${message}`, "Su iPhone usa HTTPS e abilita Microfono nelle impostazioni del sito");
-      sessionActive = false;
-      startBtn.disabled = false;
-      startBtn.classList.remove("active", "calibrating", "sounding");
-      app.classList.remove("listening");
-
-      await stopAudio();
-    }
-  }
-
-  async function endSession() {
-    sessionActive = false;
-    startBtn.disabled = false;
-    startBtn.classList.remove("active", "calibrating", "sounding");
-    app.classList.remove("listening");
-
-    progressBar.style.width = "100%";
-    timerText.textContent = "Fine";
-
-    setStatus(
-      "Fine ascolto",
-      sequence ? `Sequenza finale: ${sequence}` : "Nessun simbolo rilevato"
-    );
-
-    await stopAudio();
-  }
-
-  // ========================
-  // LOOP PRINCIPALE
-  // ========================
-  function loop(ts) {
-    if (!sessionActive || !analyser || !freqData) return;
-
-    analyser.getByteFrequencyData(freqData);
-
-    const sampleRate = audioContext.sampleRate;
-    const fftSize = analyser.fftSize;
-    const band = bandMetrics(freqData, sampleRate, fftSize, BAND_LOW_HZ, BAND_HIGH_HZ);
-
-    const level = band.avg;
-    const peakHz = band.peakHz;
-    const dominance = band.avg > 0 ? (band.peak / band.avg) : 0;
-
-    levelText.textContent = `${Math.round(level)}`;
-    freqText.textContent = `${Math.round(peakHz)} Hz`;
-
-    const elapsed = ts - sessionStartTs;
-    const calibrating = elapsed <= CALIBRATION_MS;
-
-    // calibrazione 3 secondi
-    if (calibrating) {
-      startBtn.classList.add("calibrating");
-      startBtn.classList.remove("sounding");
-
-      calibrationSamples.push(level);
-      const avgNoise = calibrationSamples.reduce((a, b) => a + b, 0) / Math.max(1, calibrationSamples.length);
-      threshold = Math.max(ABS_MIN_THRESHOLD, avgNoise * THRESHOLD_MULTIPLIER);
-
-      thresholdText.textContent = `${Math.round(threshold)}`;
-      setStatus("Fai silenzio", "Misuro il rumore di fondo...");
-    } else {
-      startBtn.classList.remove("calibrating");
-      thresholdText.textContent = `${Math.round(threshold)}`;
-      if (soundState === "idle") {
-        setStatus("Ascolto attivo", "Fai un fischio breve per punto, più lungo per linea");
-      }
-    }
-
-    // filtro fischio
-    const whistleLike =
-      !calibrating &&
-      level >= threshold &&
-      peakHz >= BAND_LOW_HZ &&
-      peakHz <= BAND_HIGH_HZ &&
-      dominance >= PEAK_DOMINANCE_RATIO;
-
-    if (whistleLike) {
-      startBtn.classList.add("sounding");
-    } else {
-      startBtn.classList.remove("sounding");
-    }
-
-    // state machine del suono
-    if (!calibrating) {
-      if (soundState === "idle") {
-        if (whistleLike) {
-          soundState = "pendingOn";
-          soundCandidateStart = ts;
-        }
-      } else if (soundState === "pendingOn") {
-        if (!whistleLike) {
-          soundState = "idle";
-        } else if ((ts - soundCandidateStart) >= MIN_ON_MS) {
-          soundState = "on";
-          soundStartTs = soundCandidateStart;
-        }
-      } else if (soundState === "on") {
-        durationText.textContent = `${Math.round(ts - soundStartTs)} ms`;
-
-        if (!whistleLike) {
-          soundState = "pendingOff";
-          soundEndCandidateTs = ts;
-        }
-      } else if (soundState === "pendingOff") {
-        if (whistleLike) {
-          // era ancora lo stesso suono
-          soundState = "on";
-        } else if ((ts - soundEndCandidateTs) >= MIN_OFF_MS) {
-          const durationMs = soundEndCandidateTs - soundStartTs;
-          durationText.textContent = `${Math.round(durationMs)} ms`;
-
-          const symbol = classifyDuration(durationMs);
-
-          if (symbol) {
-            showSymbol(symbol, durationMs);
-            setStatus(
-              symbol === "." ? "Punto rilevato" : "Linea rilevata",
-              `Durata rilevata: ${Math.round(durationMs)} ms`
-            );
-            flashGood();
-          } else {
-            lastSymbolText.textContent = "×";
-            setStatus("Suono ignorato", `Durata non valida: ${Math.round(durationMs)} ms`);
-            flashBad();
-          }
-
-          soundState = "idle";
-        }
-      }
-    }
-
-    updateProgress(ts);
-
-    if (ts >= sessionEndTs) {
-      endSession();
-      return;
-    }
-
-    rafId = requestAnimationFrame(loop);
-  }
-
-  // ========================
-  // EVENTI
-  // ========================
-  startBtn.addEventListener("click", async () => {
-    if (sessionActive) return;
-    await startSession();
-  }, { passive: true });
-
-  document.addEventListener("visibilitychange", async () => {
-    if (document.hidden && sessionActive) {
-      await endSession();
-    }
-  });
-
-  window.addEventListener("pagehide", async () => {
-    if (audioContext || sessionActive) {
-      await stopAudio();
-    }
-  });
-})();
-
+}
