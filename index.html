@@ -20,6 +20,7 @@
 
     <section class="center-area">
       <button id="startBtn" class="start-btn" aria-label="Avvia ascolto" type="button">
+        <!-- Onde ultrasuoni SOLO in calibrazione -->
         <div class="pulse-ring ring1"></div>
         <div class="pulse-ring ring2"></div>
         <div class="pulse-ring ring3"></div>
@@ -27,7 +28,7 @@
         <div class="mouth-wrap">
           <svg class="mouth-svg" viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <!-- ombra -->
-            <ellipse cx="160" cy="158" rx="105" ry="20" fill="rgba(0,0,0,0.35)"/>
+            <ellipse cx="160" cy="160" rx="105" ry="18" fill="rgba(0,0,0,0.40)"/>
             <!-- labbro superiore -->
             <path d="M35 100
                      C75 35, 120 16, 160 16
@@ -41,9 +42,9 @@
                      C200 184, 245 165, 285 100
                      C240 128, 205 138, 160 138
                      C115 138, 80 128, 35 100 Z"
-                  fill="#a80d2b"/>
+                  fill="#a90d2b"/>
             <!-- interno bocca -->
-            <ellipse id="mouthInner" cx="160" cy="100" rx="95" ry="34" fill="#160207"/>
+            <ellipse id="mouthInner" cx="160" cy="100" rx="95" ry="34" fill="#170308"/>
             <!-- lingua -->
             <path id="tongue" d="M105 118
                      C122 146, 198 146, 215 118
@@ -51,7 +52,7 @@
                   fill="#ff6285" opacity="0.95"/>
           </svg>
 
-          <!-- pallino rosso -->
+          <!-- pallino rosso centrale -->
           <div id="redDot" class="red-dot"></div>
         </div>
       </button>
@@ -67,7 +68,7 @@
           <span id="sequenceText" class="value sequence">—</span>
         </div>
         <div class="row">
-          <span class="label">Ultimo</span>
+          <span class="label">Ultimo simbolo</span>
           <span id="lastSymbolText" class="value">—</span>
         </div>
         <div class="row">
