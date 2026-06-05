@@ -1,34 +1,24 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vampire Lock</title>
-<link rel="stylesheet" href="style.css">
-</head>
+    <meta charset="UTF-8">
+    <title>Morse Detector</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <link rel="stylesheet" href="style.css">
+</head>
 <body>
 
-<button id="mouth">
-  <div class="cavity">
-    <div id="dot"></div>
-    <div id="waves">
-      <span></span>
-      <span></span>
-      <span></span>
+    <div id="container">
+        <button id="startBtn">🧛</button>
+
+        <div id="status">Premi per iniziare</div>
+
+        <div id="debug">
+            Livello: <span id="level">0</span>
+        </div>
     </div>
-  </div>
-</button>
 
-<div id="status"></div>
-<div id="hint"></div>
-<div id="feedback"></div>
-<div id="timeDisplay"></div>
-
-<div id="timer">
-  <div id="bar"></div>
-</div>
-
-<script src="app.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
