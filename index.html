@@ -1,36 +1,106 @@
-<button id="startBtn">
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Morse Vampire</title>
 
-  <div class="waves"></div>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="app" class="app">
+    <section class="top-panel">
+      <div class="top-label" id="topLabel">Tempo sessione</div>
+      <div class="progress-track">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+      <div id="timeText" class="time-text">Pronto</div>
+    </section>
 
-  <svg viewBox="0 0 300 200" class="mouth">
+    <section class="center-wrap">
+      <button id="startBtn" class="start-btn" type="button" aria-label="Avvia ascolto">
+        <!-- onde ultrasuoni -->
+        <span class="pulse-ring ring-1"></span>
+        <span class="pulse-ring ring-2"></span>
+        <span class="pulse-ring ring-3"></span>
 
-    <!-- labbro superiore -->
-    <path d="M20 100 
-             C60 30, 240 30, 280 100
-             C240 70, 200 60, 150 60
-             C100 60, 60 70, 20 100 Z"
-          fill="#b30026"/>
+        <svg class="mouth-svg" viewBox="0 0 340 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- ombra -->
+          <ellipse cx="170" cy="175" rx="115" ry="18" fill="rgba(0,0,0,0.38)" />
 
-    <!-- labbro inferiore -->
-    <path d="M20 100 
-             C60 170, 240 170, 280 100
-             C240 130, 200 140, 150 140
-             C100 140, 60 130, 20 100 Z"
-          fill="#4a0010"/>
+          <!-- labbro superiore -->
+          <path
+            d="M28 110
+               C65 35, 120 18, 170 18
+               C220 18, 275 35, 312 110
+               C270 85, 225 72, 170 72
+               C115 72, 70 85, 28 110 Z"
+            fill="#9f001f"
+          />
 
-    <!-- interno bocca -->
-    <ellipse id="mouthInner" cx="150" cy="100" rx="95" ry="35" fill="#090001"/>
+          <!-- labbro inferiore -->
+          <path
+            d="M28 110
+               C65 185, 120 202, 170 202
+               C220 202, 275 185, 312 110
+               C270 135, 225 148, 170 148
+               C115 148, 70 135, 28 110 Z"
+            fill="#54000f"
+          />
 
-    <!-- lingua -->
-    <path d="M105 120 
-             C120 150, 180 150, 195 120
-             C180 105, 120 105, 105 120 Z"
-          fill="#ff4d7a"/>
+          <!-- interno bocca -->
+          <ellipse id="mouthInner" cx="170" cy="110" rx="102" ry="34" fill="#100104" />
 
-    <!-- zanne -->
-    <polygon id="fangL" points="110,65 125,65 118,115" fill="white"/>
-    <polygon id="fangR" points="175,65 190,65 182,115" fill="white"/>
+          <!-- lingua -->
+          <path
+            id="tongue"
+            d="M114 132
+               C130 158, 210 158, 226 132
+               C210 118, 130 118, 114 132 Z"
+            fill="#d93a62"
+            opacity="0.94"
+          />
 
-  </svg>
+          <!-- zanne -->
+          <polygon id="fangL" points="122,72 138,72 130,112" fill="#fffaf5" />
+          <polygon id="fangR" points="202,72 218,72 210,112" fill="#fffaf5" />
+        </svg>
+      </button>
 
-</button>
+      <div class="info-block">
+        <div id="statusText" class="status-text">Premi la bocca per iniziare</div>
+        <div id="subText" class="sub-text">Microfono necessario</div>
+      </div>
+
+      <div class="panel">
+        <div class="row">
+          <span class="label">Sequenza</span>
+          <span id="seqText" class="value seq">—</span>
+        </div>
+        <div class="row">
+          <span class="label">Ultimo simbolo</span>
+          <span id="lastText" class="value">—</span>
+        </div>
+        <div class="row">
+          <span class="label">Durata</span>
+          <span id="durText" class="value">0 ms</span>
+        </div>
+        <div class="row">
+          <span class="label">Livello</span>
+          <span id="lvlText" class="value">0</span>
+        </div>
+        <div class="row">
+          <span class="label">Soglia</span>
+          <span id="thrText" class="value">0</span>
+        </div>
+        <div class="row">
+          <span class="label">Freq picco</span>
+          <span id="freqText" class="value">0 Hz</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
