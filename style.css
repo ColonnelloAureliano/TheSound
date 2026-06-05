@@ -7,6 +7,7 @@
   --red: #ff2b56;
   --red-dark: #8f001d;
   --red-soft: rgba(255, 25, 72, 0.18);
+  --green: #56ffb6;
   --radius: 22px;
   --shadow: 0 18px 40px rgba(0,0,0,0.38);
 }
@@ -170,7 +171,6 @@ body {
   z-index: 3;
 }
 
-/* Onde ultrasuoni durante i 3 secondi iniziali */
 .pulse-ring {
   position: absolute;
   width: 64%;
