@@ -1,262 +1,99 @@
-const mouth = document.getElementById("mouth");
-const feedback = document.getElementById("feedback");
-const statusText = document.getElementById("status");
-const hint = document.getElementById("hint");
-const timeDisplay = document.getElementById("timeDisplay");
-const bar = document.getElementById("bar");
+let audioContext;
+let analyser;
+let microphone;
+let dataArray;
 
-let analyser, audioCtx, source, stream;
-let freqData;
+let isRunning = false;
+let countdownActive = false;
 
-let listening = false;
-let gameActive = false;
+const btn = document.getElementById("startBtn");
+const status = document.getElementById("status");
+const levelEl = document.getElementById("level");
 
-let pattern = [];
+btn.addEventListener("click", async () => {
 
-let signalOn = false;
-let startTime = 0;
-let silentStart = 0;
+    // ✅ BLOCCO CLICK DURANTE I 10s
+    if (countdownActive) return;
 
-const SILENCE_HOLD = 250;
-const MIN_DOT = 200;
-const MIN_LINE = 500;
+    try {
+        status.innerText = "Richiesta microfono...";
 
-let noiseFloor = 0;
-let noiseSamples = [];
+        // ✅ AudioContext creato dentro click (iOS FIX)
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-let dotDurations = [];
-let avgDot = 0;
-let firstSound = true;
-
-const MIN_FREQ = 1200;
-const MAX_FREQ = 4000;
-
-/* CLICK */
-mouth.onclick = async () => {
-
-  if (gameActive) return;
-
-  gameActive = true;
-  mouth.disabled = true;
-
-  hardReset(false);
-
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
-
-  source = audioCtx.createMediaStreamSource(stream);
-  source.connect(analyser);
-
-  freqData = new Uint8Array(analyser.frequencyBinCount);
-
-  document.body.classList.add("open","show-dot","scan");
-  statusText.innerText = "FAI SILENZIO";
-
-  calibrate();
-};
-
-/* CALIBRAZIONE */
-function calibrate(){
-  const data = new Uint8Array(analyser.fftSize);
-  let start = Date.now();
-
-  function loop(){
-    analyser.getByteTimeDomainData(data);
-    noiseSamples.push(getRMS(data));
-
-    if(Date.now()-start < 3000){
-      requestAnimationFrame(loop);
-    } else {
-      noiseFloor = avg(noiseSamples);
-      startGame();
-    }
-  }
-  loop();
-}
-
-/* START */
-function startGame(){
-  document.body.classList.remove("scan");
-  document.body.classList.add("red");
-  statusText.innerText="";
-
-  startListening();
-  startTimer();
-
-  setTimeout(checkResult,10000);
-}
-
-/* TIMER */
-function startTimer(){
-  let start = Date.now();
-
-  function loop(){
-    let t = Date.now()-start;
-    bar.style.width = (t/10000*100)+"%";
-    if(t<10000) requestAnimationFrame(loop);
-  }
-
-  loop();
-}
-
-/* DETECTION */
-function startListening(){
-  listening = true;
-  const data = new Uint8Array(analyser.fftSize);
-
-  function loop(){
-    if(!listening) return;
-
-    analyser.getByteTimeDomainData(data);
-    analyser.getByteFrequencyData(freqData);
-
-    let rms = getRMS(data);
-    let threshold = noiseFloor * 4;
-
-    let freq = getFreq();
-    let isSound = rms > threshold && freq > MIN_FREQ && freq < MAX_FREQ;
-
-    let now = performance.now();
-
-    if(isSound){
-      if(!signalOn){
-        signalOn = true;
-        startTime = now;
-      }
-      silentStart = 0;
-    }
-
-    if(!isSound && signalOn){
-
-      if(!silentStart) silentStart = now;
-
-      if(now - silentStart > SILENCE_HOLD){
-
-        signalOn = false;
-
-        let duration = silentStart - startTime;
-
-        if(duration < MIN_DOT){
-          requestAnimationFrame(loop);
-          return;
+        if (audioContext.state === "suspended") {
+            await audioContext.resume();
         }
 
-        let symbol;
+        // ✅ piccolo hack iOS
+        const osc = audioContext.createOscillator();
+        osc.start();
+        osc.stop();
 
-        if(firstSound){
-          symbol='.';
-          firstSound=false;
-          dotDurations.push(duration);
+        // ✅ richiesta microfono
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-          let lineThreshold = Math.min(duration * 2, MIN_LINE);
+        microphone = audioContext.createMediaStreamSource(stream);
 
-          hint.innerText =
-            `. = ${Math.round(duration)} ms → linea > ${Math.round(lineThreshold)} ms`;
-        }
-        else{
-          if(dotDurations.length>=2){
-            avgDot = avg(dotDurations);
-          }
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
 
-          let dyn = avgDot * 2;
+        microphone.connect(analyser);
 
-          if(duration >= MIN_LINE && duration >= dyn){
-            symbol='-';
-          } else {
-            symbol='.';
-            dotDurations.push(duration);
-          }
-        }
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-        pattern.push(symbol);
+        isRunning = true;
 
-        feedback.innerText = pattern.join(" ");
-        timeDisplay.innerText = `Durata: ${Math.round(duration)} ms`;
+        startCountdown();
+        detectAudio();
 
-        if(pattern.length === 4){
-          listening=false;
-        }
-      }
+        console.log("✅ Microfono attivo (iOS OK)");
+
+    } catch (err) {
+        console.error(err);
+        alert("Errore accesso microfono.\nUsa HTTPS e consenti i permessi!");
     }
 
-    requestAnimationFrame(loop);
-  }
+});
 
-  loop();
+function startCountdown() {
+    countdownActive = true;
+
+    document.body.classList.add("red");
+    status.innerText = "🎤 Ascolto (10s)";
+
+    setTimeout(() => {
+        countdownActive = false;
+        document.body.classList.remove("red");
+        status.innerText = "Fine ascolto - riprova";
+
+    }, 10000);
 }
 
-/* FREQ */
-function getFreq(){
-  let max = 0;
-  let idx = 0;
+function detectAudio() {
 
-  for(let i=0;i<freqData.length;i++){
-    if(freqData[i]>max){
-      max = freqData[i];
-      idx = i;
+    function loop() {
+
+        if (!isRunning) return;
+
+        analyser.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+        }
+
+        let avg = sum / dataArray.length;
+
+        levelEl.innerText = avg.toFixed(0);
+
+        // ✅ soglia base semplice (poi miglioriamo)
+        if (avg > 60) {
+            status.innerText = "🔊 Suono rilevato";
+        }
+
+        requestAnimationFrame(loop);
     }
-  }
 
-  return idx * audioCtx.sampleRate / analyser.fftSize;
-}
-
-/* RESULT */
-function checkResult(){
-  listening=false;
-  gameActive=false;
-  mouth.disabled=false;
-
-  if(pattern.join('')==="..--"){
-    document.body.classList.add("success");
-  } else {
-    hardReset();
-  }
-}
-
-/* RESET */
-function hardReset(full=true){
-
-  listening=false;
-  gameActive=false;
-
-  signalOn=false;
-  silentStart=0;
-  startTime=0;
-
-  pattern=[];
-  firstSound=true;
-  dotDurations=[];
-  avgDot=0;
-
-  noiseSamples=[];
-  noiseFloor=0;
-
-  feedback.innerText="";
-  hint.innerText="";
-  statusText.innerText="";
-  timeDisplay.innerText="";
-  bar.style.width="0%";
-
-  document.body.className="";
-
-  if(full){
-    mouth.disabled=false;
-  }
-}
-
-/* UTIL */
-function getRMS(data){
-  let sum=0;
-  for(let i=0;i<data.length;i++){
-    let v=(data[i]-128)/128;
-    sum+=v*v;
-  }
-  return Math.sqrt(sum/data.length);
-}
-
-function avg(a){
-  return a.reduce((x,y)=>x+y,0)/a.length;
+    loop();
 }
