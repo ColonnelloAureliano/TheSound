@@ -1,51 +1,50 @@
 (() => {
   "use strict";
 
-  // ========================
-  // CONFIG
-  // ========================
-  const SESSION_MS = 10000;
+  // -----------------------------
+  // Config
+  // -----------------------------
   const CALIBRATION_MS = 3000;
+  const SESSION_MS = 10000;
 
   const DOT_MIN_MS = 200;
   const DOT_MAX_MS = 450;
   const DASH_MIN_MS = 500;
 
-  const MIN_ON_MS = 45;   // evita falsi trigger brevissimi
-  const MIN_OFF_MS = 90;  // aspetta fine suono reale
+  const MIN_ON_MS = 45;
+  const MIN_OFF_MS = 90;
 
-  // Filtro "tipo fischio"
   const BAND_LOW_HZ = 900;
   const BAND_HIGH_HZ = 4000;
-  const PEAK_DOMINANCE_RATIO = 1.25;
+  const PEAK_DOMINANCE_RATIO = 1.20;
 
-  // Soglia dinamica
   const ABS_MIN_THRESHOLD = 10;
   const THRESHOLD_MULTIPLIER = 2.0;
-
   const MAX_SEQUENCE_LEN = 28;
 
-  // ========================
+  // -----------------------------
   // DOM
-  // ========================
+  // -----------------------------
   const app = document.getElementById("app");
   const startBtn = document.getElementById("startBtn");
+
+  const topLabel = document.getElementById("topLabel");
   const progressBar = document.getElementById("progressBar");
-  const timerText = document.getElementById("timerText");
+  const timeText = document.getElementById("timeText");
 
   const statusText = document.getElementById("statusText");
   const subText = document.getElementById("subText");
 
-  const sequenceText = document.getElementById("sequenceText");
-  const lastSymbolText = document.getElementById("lastSymbolText");
-  const durationText = document.getElementById("durationText");
-  const levelText = document.getElementById("levelText");
-  const thresholdText = document.getElementById("thresholdText");
+  const seqText = document.getElementById("seqText");
+  const lastText = document.getElementById("lastText");
+  const durText = document.getElementById("durText");
+  const lvlText = document.getElementById("lvlText");
+  const thrText = document.getElementById("thrText");
   const freqText = document.getElementById("freqText");
 
-  // ========================
-  // AUDIO
-  // ========================
+  // -----------------------------
+  // Audio state
+  // -----------------------------
   let audioContext = null;
   let stream = null;
   let source = null;
@@ -54,67 +53,79 @@
   let keepAliveNode = null;
   let freqData = null;
 
-  // ========================
-  // STATO
-  // ========================
-  let sessionActive = false;
-  let sessionStartTs = 0;
-  let sessionEndTs = 0;
+  // -----------------------------
+  // App state
+  // -----------------------------
+  let active = false;
+  let phase = "idle"; // idle | calibrating | session
+  let calibrationStart = 0;
+  let sessionStart = 0;
+  let sessionEnd = 0;
 
   let threshold = ABS_MIN_THRESHOLD;
   let calibrationSamples = [];
   let sequence = "";
   let rafId = 0;
 
-  // State machine suono
+  // sound state machine
   let soundState = "idle"; // idle | pendingOn | on | pendingOff
   let soundCandidateStart = 0;
-  let soundStartTs = 0;
-  let soundEndCandidateTs = 0;
+  let soundStart = 0;
+  let soundEndCandidate = 0;
 
-  // ========================
-  // HELPERS
-  // ========================
+  // -----------------------------
+  // Helpers
+  // -----------------------------
   function now() {
     return performance.now();
   }
 
-  function setStatus(main, sub = "") {
+  function setStatus(main, sub) {
     statusText.textContent = main;
-    subText.textContent = sub;
+    subText.textContent = sub || "";
   }
 
-  function updateProgress(ts) {
-    const elapsed = Math.max(0, ts - sessionStartTs);
-    const progress = Math.min(1, elapsed / SESSION_MS);
-    progressBar.style.width = `${progress * 100}%`;
-
-    const remaining = Math.max(0, sessionEndTs - ts);
-    timerText.textContent = remaining > 0 ? `${(remaining / 1000).toFixed(1)} s` : "0.0 s";
-  }
-
-  function clearUiForNewSession() {
+  function resetUi() {
+    topLabel.textContent = "Tempo sessione";
     progressBar.style.width = "0%";
-    timerText.textContent = `${(SESSION_MS / 1000).toFixed(1)} s`;
+    timeText.textContent = "Pronto";
+
+    seqText.textContent = "—";
+    lastText.textContent = "—";
+    durText.textContent = "0 ms";
+    lvlText.textContent = "0";
+    thrText.textContent = "0";
+    freqText.textContent = "0 Hz";
 
     sequence = "";
-    sequenceText.textContent = "—";
-    lastSymbolText.textContent = "—";
-    durationText.textContent = "0 ms";
-    levelText.textContent = "0";
-    thresholdText.textContent = "0";
-    freqText.textContent = "0 Hz";
   }
 
-  function showSymbol(symbol, durationMs) {
-    lastSymbolText.textContent = symbol;
-    durationText.textContent = `${Math.round(durationMs)} ms`;
+  function flashGood() {
+    startBtn.classList.remove("bad-flash");
+    startBtn.classList.add("good-flash");
+    setTimeout(() => startBtn.classList.remove("good-flash"), 240);
+  }
 
+  function flashBad() {
+    startBtn.classList.remove("good-flash");
+    startBtn.classList.add("bad-flash");
+    setTimeout(() => startBtn.classList.remove("bad-flash"), 240);
+  }
+
+  function classifyDuration(ms) {
+    if (ms >= DOT_MIN_MS && ms <= DOT_MAX_MS) return ".";
+    if (ms >= DASH_MIN_MS) return "-";
+    return null;
+  }
+
+  function appendSymbol(symbol, ms) {
     if (sequence.length >= MAX_SEQUENCE_LEN) {
       sequence = sequence.slice(-(MAX_SEQUENCE_LEN - 1));
     }
     sequence += symbol;
-    sequenceText.textContent = sequence || "—";
+    seqText.textContent = sequence;
+    lastText.textContent = symbol;
+    durText.textContent = `${Math.round(ms)} ms`;
   }
 
   function bandMetrics(data, sampleRate, fftSize, lowHz, highHz) {
@@ -144,38 +155,18 @@
     };
   }
 
-  function classifyDuration(ms) {
-    if (ms >= DOT_MIN_MS && ms <= DOT_MAX_MS) return ".";
-    if (ms >= DASH_MIN_MS) return "-";
-    return null;
-  }
-
-  function flashGood() {
-    startBtn.classList.remove("bad-flash");
-    startBtn.classList.add("good-flash");
-    setTimeout(() => startBtn.classList.remove("good-flash"), 260);
-  }
-
-  function flashBad() {
-    startBtn.classList.remove("good-flash");
-    startBtn.classList.add("bad-flash");
-    setTimeout(() => startBtn.classList.remove("bad-flash"), 260);
-  }
-
-  // ========================
-  // AUDIO SETUP / STOP
-  // ========================
+  // -----------------------------
+  // Audio setup / teardown
+  // -----------------------------
   async function setupAudio() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error("BROWSER_NOT_SUPPORTED");
     }
 
-    // AudioContext creato nel click -> iPhone friendly
     audioContext = new (window.AudioContext || window.webkitAudioContext)({
       latencyHint: "interactive"
     });
 
-    // richiesta microfono nel click
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: false,
@@ -184,7 +175,6 @@
       }
     });
 
-    // fix Safari/iPhone: resume dopo prompt
     if (audioContext.state === "suspended") {
       await audioContext.resume();
     }
@@ -196,7 +186,7 @@
 
     source.connect(analyser);
 
-    // piccolo keep alive per Safari (quasi muto)
+    // keep alive leggerissimo per Safari
     keepAliveGain = audioContext.createGain();
     keepAliveGain.gain.value = 0.00001;
     keepAliveGain.connect(audioContext.destination);
@@ -216,14 +206,12 @@
     freqData = new Uint8Array(analyser.frequencyBinCount);
   }
 
-  async function stopAudio() {
+  async function teardownAudio() {
     cancelAnimationFrame(rafId);
     rafId = 0;
 
     try {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      if (stream) stream.getTracks().forEach(t => t.stop());
     } catch (_) {}
 
     try { if (source) source.disconnect(); } catch (_) {}
@@ -252,78 +240,94 @@
     freqData = null;
   }
 
-  // ========================
-  // SESSIONE
-  // ========================
-  async function startSession() {
-    if (sessionActive) return;
-
-    sessionActive = true;
-    startBtn.disabled = true;
-    startBtn.classList.add("active");
-    app.classList.add("listening");
-
+  // -----------------------------
+  // Phases
+  // -----------------------------
+  function beginCalibration() {
+    phase = "calibrating";
+    calibrationStart = now();
     calibrationSamples = [];
     threshold = ABS_MIN_THRESHOLD;
+
+    topLabel.textContent = "Calibrazione";
+    progressBar.style.width = "0%";
+    timeText.textContent = "3.0 s";
+
+    setStatus("Fai silenzio", "Misuro il rumore di fondo...");
+    startBtn.classList.add("calibrating");
+  }
+
+  function beginSession() {
+    phase = "session";
+    sessionStart = now();
+    sessionEnd = sessionStart + SESSION_MS;
+
+    topLabel.textContent = "Tempo sessione";
+    progressBar.style.width = "0%";
+    timeText.textContent = "10.0 s";
+
+    setStatus("Ascolto attivo", "Fischio breve = punto • fischio lungo = linea");
+    startBtn.classList.remove("calibrating");
+
     soundState = "idle";
     soundCandidateStart = 0;
-    soundStartTs = 0;
-    soundEndCandidateTs = 0;
+    soundStart = 0;
+    soundEndCandidate = 0;
+  }
 
-    clearUiForNewSession();
+  async function startApp() {
+    if (active) return;
+
+    active = true;
+    app.classList.add("listening");
+    startBtn.classList.add("active");
+    startBtn.disabled = true;
+
+    resetUi();
     setStatus("Richiesta microfono...", "Consenti l’accesso se il browser lo chiede");
 
     try {
       await setupAudio();
-
-      sessionStartTs = now();
-      sessionEndTs = sessionStartTs + SESSION_MS;
-
+      beginCalibration();
       rafId = requestAnimationFrame(loop);
     } catch (err) {
       console.error(err);
 
-      let message = "Errore accesso microfono";
-      if (err && err.name === "NotAllowedError") {
-        message = "Permesso microfono negato o bloccato";
-      } else if (err && err.name === "NotFoundError") {
-        message = "Microfono non trovato";
-      } else if (err && err.message === "BROWSER_NOT_SUPPORTED") {
-        message = "Browser non compatibile";
-      }
+      let msg = "Errore accesso microfono";
+      if (err && err.name === "NotAllowedError") msg = "Permesso microfono negato o bloccato";
+      else if (err && err.name === "NotFoundError") msg = "Microfono non trovato";
+      else if (err && err.message === "BROWSER_NOT_SUPPORTED") msg = "Browser non compatibile";
 
-      setStatus(`❌ ${message}`, "Su iPhone usa HTTPS e abilita Microfono nelle impostazioni del sito");
-      sessionActive = false;
+      setStatus(`❌ ${msg}`, "Apri la pagina in HTTPS e abilita il microfono");
+      active = false;
+      phase = "idle";
       startBtn.disabled = false;
       startBtn.classList.remove("active", "calibrating", "sounding");
       app.classList.remove("listening");
-
-      await stopAudio();
+      await teardownAudio();
     }
   }
 
-  async function endSession() {
-    sessionActive = false;
+  async function endApp(finalText) {
+    active = false;
+    phase = "idle";
+
     startBtn.disabled = false;
     startBtn.classList.remove("active", "calibrating", "sounding");
     app.classList.remove("listening");
 
     progressBar.style.width = "100%";
-    timerText.textContent = "Fine";
+    timeText.textContent = "Fine";
+    setStatus("Fine ascolto", finalText || (sequence ? `Sequenza finale: ${sequence}` : "Nessun simbolo rilevato"));
 
-    setStatus(
-      "Fine ascolto",
-      sequence ? `Sequenza finale: ${sequence}` : "Nessun simbolo rilevato"
-    );
-
-    await stopAudio();
+    await teardownAudio();
   }
 
-  // ========================
-  // LOOP PRINCIPALE
-  // ========================
+  // -----------------------------
+  // Main loop
+  // -----------------------------
   function loop(ts) {
-    if (!sessionActive || !analyser || !freqData) return;
+    if (!active || !analyser || !freqData) return;
 
     analyser.getByteFrequencyData(freqData);
 
@@ -335,47 +339,47 @@
     const peakHz = band.peakHz;
     const dominance = band.avg > 0 ? (band.peak / band.avg) : 0;
 
-    levelText.textContent = `${Math.round(level)}`;
+    lvlText.textContent = `${Math.round(level)}`;
     freqText.textContent = `${Math.round(peakHz)} Hz`;
 
-    const elapsed = ts - sessionStartTs;
-    const calibrating = elapsed <= CALIBRATION_MS;
-
-    // calibrazione 3 secondi
-    if (calibrating) {
-      startBtn.classList.add("calibrating");
-      startBtn.classList.remove("sounding");
+    if (phase === "calibrating") {
+      const elapsed = ts - calibrationStart;
+      const remaining = Math.max(0, CALIBRATION_MS - elapsed);
 
       calibrationSamples.push(level);
       const avgNoise = calibrationSamples.reduce((a, b) => a + b, 0) / Math.max(1, calibrationSamples.length);
       threshold = Math.max(ABS_MIN_THRESHOLD, avgNoise * THRESHOLD_MULTIPLIER);
+      thrText.textContent = `${Math.round(threshold)}`;
 
-      thresholdText.textContent = `${Math.round(threshold)}`;
-      setStatus("Fai silenzio", "Misuro il rumore di fondo...");
-    } else {
-      startBtn.classList.remove("calibrating");
-      thresholdText.textContent = `${Math.round(threshold)}`;
-      if (soundState === "idle") {
-        setStatus("Ascolto attivo", "Fai un fischio breve per punto, più lungo per linea");
+      timeText.textContent = `${(remaining / 1000).toFixed(1)} s`;
+
+      if (elapsed >= CALIBRATION_MS) {
+        beginSession();
       }
+
+      rafId = requestAnimationFrame(loop);
+      return;
     }
 
-    // filtro fischio
-    const whistleLike =
-      !calibrating &&
-      level >= threshold &&
-      peakHz >= BAND_LOW_HZ &&
-      peakHz <= BAND_HIGH_HZ &&
-      dominance >= PEAK_DOMINANCE_RATIO;
+    if (phase === "session") {
+      const elapsed = ts - sessionStart;
+      const remaining = Math.max(0, sessionEnd - ts);
+      const progress = Math.min(1, elapsed / SESSION_MS);
 
-    if (whistleLike) {
-      startBtn.classList.add("sounding");
-    } else {
-      startBtn.classList.remove("sounding");
-    }
+      progressBar.style.width = `${progress * 100}%`;
+      timeText.textContent = `${(remaining / 1000).toFixed(1)} s`;
+      thrText.textContent = `${Math.round(threshold)}`;
 
-    // state machine del suono
-    if (!calibrating) {
+      const whistleLike =
+        level >= threshold &&
+        peakHz >= BAND_LOW_HZ &&
+        peakHz <= BAND_HIGH_HZ &&
+        dominance >= PEAK_DOMINANCE_RATIO;
+
+      if (whistleLike) startBtn.classList.add("sounding");
+      else startBtn.classList.remove("sounding");
+
+      // state machine detection
       if (soundState === "idle") {
         if (whistleLike) {
           soundState = "pendingOn";
@@ -386,70 +390,70 @@
           soundState = "idle";
         } else if ((ts - soundCandidateStart) >= MIN_ON_MS) {
           soundState = "on";
-          soundStartTs = soundCandidateStart;
+          soundStart = soundCandidateStart;
         }
       } else if (soundState === "on") {
-        durationText.textContent = `${Math.round(ts - soundStartTs)} ms`;
+        durText.textContent = `${Math.round(ts - soundStart)} ms`;
 
         if (!whistleLike) {
           soundState = "pendingOff";
-          soundEndCandidateTs = ts;
+          soundEndCandidate = ts;
         }
       } else if (soundState === "pendingOff") {
         if (whistleLike) {
-          // era ancora lo stesso suono
           soundState = "on";
-        } else if ((ts - soundEndCandidateTs) >= MIN_OFF_MS) {
-          const durationMs = soundEndCandidateTs - soundStartTs;
-          durationText.textContent = `${Math.round(durationMs)} ms`;
+        } else if ((ts - soundEndCandidate) >= MIN_OFF_MS) {
+          const durationMs = soundEndCandidate - soundStart;
+          durText.textContent = `${Math.round(durationMs)} ms`;
 
           const symbol = classifyDuration(durationMs);
 
           if (symbol) {
-            showSymbol(symbol, durationMs);
+            appendSymbol(symbol, durationMs);
             setStatus(
               symbol === "." ? "Punto rilevato" : "Linea rilevata",
               `Durata rilevata: ${Math.round(durationMs)} ms`
             );
             flashGood();
           } else {
-            lastSymbolText.textContent = "×";
+            lastText.textContent = "×";
             setStatus("Suono ignorato", `Durata non valida: ${Math.round(durationMs)} ms`);
             flashBad();
           }
 
           soundState = "idle";
+          startBtn.classList.remove("sounding");
         }
       }
-    }
 
-    updateProgress(ts);
-
-    if (ts >= sessionEndTs) {
-      endSession();
-      return;
+      if (ts >= sessionEnd) {
+        endApp();
+        return;
+      }
     }
 
     rafId = requestAnimationFrame(loop);
   }
 
-  // ========================
-  // EVENTI
-  // ========================
+  // -----------------------------
+  // Events
+  // -----------------------------
   startBtn.addEventListener("click", async () => {
-    if (sessionActive) return;
-    await startSession();
+    if (active) return;
+    await startApp();
   }, { passive: true });
 
   document.addEventListener("visibilitychange", async () => {
-    if (document.hidden && sessionActive) {
-      await endSession();
+    if (document.hidden && active) {
+      await endApp("Sessione interrotta");
     }
   });
 
   window.addEventListener("pagehide", async () => {
-    if (audioContext || sessionActive) {
-      await stopAudio();
+    if (active || audioContext) {
+      await teardownAudio();
     }
   });
+
+  resetUi();
 })();
