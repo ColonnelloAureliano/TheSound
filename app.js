@@ -12,14 +12,17 @@
   const DASH_MIN_MS = 500;
 
   const MIN_ON_MS = 45;   // evita falsi trigger brevissimi
-  const MIN_OFF_MS = 90;  // aspetta che il suono sia finito davvero
+  const MIN_OFF_MS = 90;  // aspetta fine suono reale
 
+  // Filtro "tipo fischio"
   const BAND_LOW_HZ = 900;
   const BAND_HIGH_HZ = 4000;
   const PEAK_DOMINANCE_RATIO = 1.25;
 
+  // Soglia dinamica
   const ABS_MIN_THRESHOLD = 10;
   const THRESHOLD_MULTIPLIER = 2.0;
+
   const MAX_SEQUENCE_LEN = 28;
 
   // ========================
@@ -48,10 +51,11 @@
   let source = null;
   let analyser = null;
   let keepAliveGain = null;
+  let keepAliveNode = null;
   let freqData = null;
 
   // ========================
-  // STATE
+  // STATO
   // ========================
   let sessionActive = false;
   let sessionStartTs = 0;
@@ -62,7 +66,7 @@
   let sequence = "";
   let rafId = 0;
 
-  // sound state machine
+  // State machine suono
   let soundState = "idle"; // idle | pendingOn | on | pendingOff
   let soundCandidateStart = 0;
   let soundStartTs = 0;
@@ -82,13 +86,24 @@
 
   function updateProgress(ts) {
     const elapsed = Math.max(0, ts - sessionStartTs);
-    const ratio = Math.min(1, elapsed / SESSION_MS);
-    progressBar.style.width = `${ratio * 100}%`;
+    const progress = Math.min(1, elapsed / SESSION_MS);
+    progressBar.style.width = `${progress * 100}%`;
 
     const remaining = Math.max(0, sessionEndTs - ts);
-    timerText.textContent = remaining > 0
-      ? `${(remaining / 1000).toFixed(1)} s`
-      : "0.0 s";
+    timerText.textContent = remaining > 0 ? `${(remaining / 1000).toFixed(1)} s` : "0.0 s";
+  }
+
+  function clearUiForNewSession() {
+    progressBar.style.width = "0%";
+    timerText.textContent = `${(SESSION_MS / 1000).toFixed(1)} s`;
+
+    sequence = "";
+    sequenceText.textContent = "—";
+    lastSymbolText.textContent = "—";
+    durationText.textContent = "0 ms";
+    levelText.textContent = "0";
+    thresholdText.textContent = "0";
+    freqText.textContent = "0 Hz";
   }
 
   function showSymbol(symbol, durationMs) {
@@ -100,18 +115,6 @@
     }
     sequence += symbol;
     sequenceText.textContent = sequence || "—";
-  }
-
-  function clearUiForNewSession() {
-    progressBar.style.width = "0%";
-    timerText.textContent = `${(SESSION_MS / 1000).toFixed(1)} s`;
-    sequence = "";
-    sequenceText.textContent = "—";
-    lastSymbolText.textContent = "—";
-    durationText.textContent = "0 ms";
-    levelText.textContent = "0";
-    thresholdText.textContent = "0";
-    freqText.textContent = "0 Hz";
   }
 
   function bandMetrics(data, sampleRate, fftSize, lowHz, highHz) {
@@ -167,11 +170,12 @@
       throw new Error("BROWSER_NOT_SUPPORTED");
     }
 
+    // AudioContext creato nel click -> iPhone friendly
     audioContext = new (window.AudioContext || window.webkitAudioContext)({
       latencyHint: "interactive"
     });
 
-    // richiesta microfono dal tap utente
+    // richiesta microfono nel click
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: false,
@@ -180,7 +184,7 @@
       }
     });
 
-    // fix iPhone / Safari: resume dopo il prompt
+    // fix Safari/iPhone: resume dopo prompt
     if (audioContext.state === "suspended") {
       await audioContext.resume();
     }
@@ -190,13 +194,24 @@
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.18;
 
-    // keep alive safari
+    source.connect(analyser);
+
+    // piccolo keep alive per Safari (quasi muto)
     keepAliveGain = audioContext.createGain();
-    keepAliveGain.gain.value = 0.001;
-    analyser.connect(keepAliveGain);
+    keepAliveGain.gain.value = 0.00001;
     keepAliveGain.connect(audioContext.destination);
 
-    source.connect(analyser);
+    if (typeof audioContext.createConstantSource === "function") {
+      keepAliveNode = audioContext.createConstantSource();
+      keepAliveNode.offset.value = 1;
+      keepAliveNode.connect(keepAliveGain);
+      keepAliveNode.start();
+    } else {
+      keepAliveNode = audioContext.createOscillator();
+      keepAliveNode.frequency.value = 1;
+      keepAliveNode.connect(keepAliveGain);
+      keepAliveNode.start();
+    }
 
     freqData = new Uint8Array(analyser.frequencyBinCount);
   }
@@ -213,7 +228,14 @@
 
     try { if (source) source.disconnect(); } catch (_) {}
     try { if (analyser) analyser.disconnect(); } catch (_) {}
+    try { if (keepAliveNode) keepAliveNode.disconnect(); } catch (_) {}
     try { if (keepAliveGain) keepAliveGain.disconnect(); } catch (_) {}
+
+    try {
+      if (keepAliveNode && typeof keepAliveNode.stop === "function") {
+        keepAliveNode.stop();
+      }
+    } catch (_) {}
 
     try {
       if (audioContext && audioContext.state !== "closed") {
@@ -226,11 +248,12 @@
     source = null;
     analyser = null;
     keepAliveGain = null;
+    keepAliveNode = null;
     freqData = null;
   }
 
   // ========================
-  // SESSION
+  // SESSIONE
   // ========================
   async function startSession() {
     if (sessionActive) return;
@@ -284,15 +307,20 @@
     startBtn.disabled = false;
     startBtn.classList.remove("active", "calibrating", "sounding");
     app.classList.remove("listening");
+
     progressBar.style.width = "100%";
     timerText.textContent = "Fine";
 
-    setStatus("Fine ascolto", sequence ? `Sequenza finale: ${sequence}` : "Nessun simbolo rilevato");
+    setStatus(
+      "Fine ascolto",
+      sequence ? `Sequenza finale: ${sequence}` : "Nessun simbolo rilevato"
+    );
+
     await stopAudio();
   }
 
   // ========================
-  // MAIN LOOP
+  // LOOP PRINCIPALE
   // ========================
   function loop(ts) {
     if (!sessionActive || !analyser || !freqData) return;
@@ -313,6 +341,7 @@
     const elapsed = ts - sessionStartTs;
     const calibrating = elapsed <= CALIBRATION_MS;
 
+    // calibrazione 3 secondi
     if (calibrating) {
       startBtn.classList.add("calibrating");
       startBtn.classList.remove("sounding");
@@ -326,9 +355,14 @@
     } else {
       startBtn.classList.remove("calibrating");
       thresholdText.textContent = `${Math.round(threshold)}`;
+      if (soundState === "idle") {
+        setStatus("Ascolto attivo", "Fai un fischio breve per punto, più lungo per linea");
+      }
     }
 
-    const whistleLike = !calibrating &&
+    // filtro fischio
+    const whistleLike =
+      !calibrating &&
       level >= threshold &&
       peakHz >= BAND_LOW_HZ &&
       peakHz <= BAND_HIGH_HZ &&
@@ -340,7 +374,7 @@
       startBtn.classList.remove("sounding");
     }
 
-    // Stato suono
+    // state machine del suono
     if (!calibrating) {
       if (soundState === "idle") {
         if (whistleLike) {
@@ -363,12 +397,14 @@
         }
       } else if (soundState === "pendingOff") {
         if (whistleLike) {
+          // era ancora lo stesso suono
           soundState = "on";
         } else if ((ts - soundEndCandidateTs) >= MIN_OFF_MS) {
           const durationMs = soundEndCandidateTs - soundStartTs;
           durationText.textContent = `${Math.round(durationMs)} ms`;
 
           const symbol = classifyDuration(durationMs);
+
           if (symbol) {
             showSymbol(symbol, durationMs);
             setStatus(
@@ -398,7 +434,7 @@
   }
 
   // ========================
-  // EVENTS
+  // EVENTI
   // ========================
   startBtn.addEventListener("click", async () => {
     if (sessionActive) return;
@@ -413,4 +449,7 @@
 
   window.addEventListener("pagehide", async () => {
     if (audioContext || sessionActive) {
-      await stop
+      await stopAudio();
+    }
+  });
+})();
